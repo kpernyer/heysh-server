@@ -1,0 +1,31 @@
+version: 1
+model: gpt-4o
+temperature: 0.3
+max_tokens: 2000
+
+system: |
+  You are a knowledge assistant for the hey.sh platform.
+  Your task is to answer user questions based on provided document context.
+
+  Guidelines:
+  - Base your answers ONLY on the provided context
+  - If the context doesn't contain enough information, say so clearly
+  - Cite specific documents when possible
+  - Be concise but thorough
+  - If uncertain, acknowledge it
+
+user_template: |
+  Question: {{ question }}
+
+  Domain: {{ domain_id }}
+
+  Available Context ({{ context|length }} documents):
+  {% for doc in context %}
+  ---
+  Document: {{ doc.document_id }}
+  {{ doc.text }}
+  ---
+  {% endfor %}
+
+  Please provide a clear, well-structured answer based on the context above.
+  If the context is insufficient, explain what additional information would be needed.

@@ -1,0 +1,250 @@
+# Cursor Rules for hey.sh Backend
+
+## Python Code Style & Architecture
+
+### General Python Rules
+- Use Python 3.11+ features and type hints throughout
+- Follow PEP 8 with 100 character line length (configured in pyproject.toml)
+- Use `structlog` for all logging with structured context
+- Prefer async/await over threading for I/O operations
+- Use dataclasses for simple data containers
+- Use Pydantic models for data validation and serialization
+- Import order: standard library, third-party, local imports (enforced by ruff)
+
+### Type Hints & MyPy
+- All function parameters and return types must be typed
+- Use `Optional[T]` for nullable types, not `T | None`
+- Use `list[T]` and `dict[str, T]` syntax for generic types
+- Use `from typing import Any` for truly dynamic content
+- Use `TYPE_CHECKING` imports for type-only imports
+- Configure mypy with `disallow_untyped_defs = true`
+
+### Error Handling
+- Use specific exception types, not bare `except:`
+- Log errors with structured context using `logger.error()`
+- Re-raise exceptions with `raise` (not `raise e`)
+- Use `try/except/else/finally` blocks appropriately
+- Handle Temporal workflow exceptions specifically
+
+### Clean Architecture Principles
+- **Dependency Rule**: Dependencies point inward only
+- **src/app/** is the core business logic (entities, use cases)
+- **workflow/**, **activity/**, **worker/**, **service/** are orchestration layers
+- Orchestration layers MAY import from `src/app/**`
+- `src/app/**` MUST NOT import from orchestration layers
+
+### Import Dependencies (Enforced)
+```python
+# ✅ Allowed imports by module type:
+workflow/     -> activity/, src.app
+activity/     -> src.app
+worker/       -> workflow/, activity/, src.app
+service/      -> src.app, workflow/
+src.app/      -> [] (no orchestration imports)
+```
+
+### File Organization
+- Use singular directory names: `workflow/`, `activity/`, `worker/`, `service/`
+- Group related functionality in modules
+- Keep `__init__.py` files minimal
+- Use absolute imports from project root
+
+## Temporal Workflow Patterns
+
+### Workflow Structure
+```python
+@workflow.defn
+class WorkflowName:
+    """Brief description of workflow purpose."""
+
+    @workflow.run
+    async def run(self, input_data: InputType) -> OutputType:
+        """Main workflow execution method."""
+        # Implementation
+```
+
+### Activity Structure
+```python
+@activity.defn
+async def activity_name(input_data: InputType) -> OutputType:
+    """Activity description with clear purpose."""
+    # Implementation
+```
+
+### Retry Policies
+- Always define retry policies for activities
+- Use exponential backoff with reasonable limits
+- Set appropriate timeouts for different operation types
+
+### Error Handling in Workflows
+- Use `workflow.execute_activity()` with proper error handling
+- Log workflow state changes with structured logging
+- Handle Temporal-specific exceptions appropriately
+
+## Data Models & Database
+
+### BaseModel Pattern
+- All models inherit from `BaseModel` in `src/app/models/`
+- Use class methods for CRUD operations
+- Include proper error handling and logging
+- Return `Optional[dict]` for single items, `list[dict]` for collections
+
+### Database Operations
+- Use Supabase client through `get_supabase_client()`
+- Always handle database exceptions
+- Log all database operations with context
+- Use transactions for multi-step operations
+
+### Pydantic Schemas
+- Define schemas in `src/app/schemas/`
+- Use for API request/response validation
+- Include proper field validation and error messages
+- Use `BaseModel` from Pydantic, not our custom BaseModel
+
+## API & Service Layer
+
+### FastAPI Patterns
+- Use dependency injection for database clients
+- Define response models with Pydantic
+- Use proper HTTP status codes
+- Include comprehensive error handling
+
+### Service Layer
+- Keep business logic in `src/app/`
+- Use services for complex operations
+- Keep API routes thin, delegate to services
+- Use dependency injection for testability
+
+## Logging & Monitoring
+
+### Structured Logging
+```python
+import structlog
+logger = structlog.get_logger()
+
+# Good logging examples:
+logger.info("Operation completed", user_id=user_id, duration=duration)
+logger.error("Operation failed", error=str(e), context={"key": "value"})
+```
+
+### Log Levels
+- `DEBUG`: Detailed information for debugging
+- `INFO`: General information about program execution
+- `WARNING`: Something unexpected happened
+- `ERROR`: Serious problem occurred
+- `CRITICAL`: Very serious error occurred
+
+## Configuration & Environment
+
+### Environment Variables
+- Use `pydantic-settings` for configuration
+- Define settings classes in `src/app/config/`
+- Use environment-specific configurations
+- Validate all configuration at startup
+
+### Secrets Management
+- Never hardcode secrets
+- Use environment variables for sensitive data
+- Use proper secret management in production
+
+## Performance & Optimization
+
+### Async/Await
+- Use async/await for all I/O operations
+- Avoid blocking operations in async functions
+- Use `asyncio.gather()` for concurrent operations
+- Use `asyncio.create_task()` for fire-and-forget operations
+
+### Database Optimization
+- Use connection pooling
+- Implement proper indexing
+- Use batch operations when possible
+- Monitor query performance
+
+## Security
+
+### Input Validation
+- Validate all inputs with Pydantic
+- Sanitize user inputs
+- Use proper authentication and authorization
+- Implement rate limiting
+
+### Data Protection
+- Use HTTPS in production
+- Implement proper CORS policies
+- Sanitize logs to avoid sensitive data exposure
+- Use secure session management
+
+## Testing Guidelines
+
+### Test Structure
+- Use pytest with async support
+- Follow AMAA pattern: Arrange, Mock, Act, Assert
+- Use fixtures for common setup
+- Group related tests in classes
+
+### Test Organization
+- Unit tests in `test/unit/`
+- Integration tests in `test/integration/`
+- End-to-end tests in `test/e2e/`
+- Use descriptive test names
+
+### Mocking
+- Mock external dependencies
+- Use `unittest.mock` or `pytest-mock`
+- Mock at the boundary of your system
+- Verify mock interactions
+
+### Test Data
+- Use factories for test data generation
+- Keep test data minimal and focused
+- Use realistic but not production data
+- Clean up test data after tests
+
+## Documentation
+
+### Code Documentation
+- Use docstrings for all public functions and classes
+- Follow Google docstring format
+- Include type information in docstrings
+- Document complex business logic
+
+### API Documentation
+- Use FastAPI's automatic OpenAPI generation
+- Include examples in API documentation
+- Document error responses
+- Keep documentation up to date
+
+## Development Workflow
+
+### Code Quality
+- Use pre-commit hooks for code formatting
+- Run mypy for type checking
+- Use ruff for linting
+- Maintain high test coverage
+
+### Git Workflow
+- Use meaningful commit messages
+- Create feature branches
+- Use pull requests for code review
+- Keep commits focused and atomic
+
+## Deployment & Operations
+
+### Docker
+- Use multi-stage builds for production
+- Keep images small and secure
+- Use specific version tags
+- Implement health checks
+
+### Monitoring
+- Use structured logging for observability
+- Implement metrics collection
+- Set up alerting for critical issues
+- Monitor performance and errors
+
+### Configuration Management
+- Use environment-specific configs
+- Implement proper secret management
+- Use configuration validation
+- Document all configuration options

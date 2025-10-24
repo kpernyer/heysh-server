@@ -1,0 +1,405 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hey.sh Local Servers</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            color: white;
+            text-align: center;
+            margin-bottom: 3rem;
+            font-size: 2.5rem;
+        }
+
+        .servers-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .server-card {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .server-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.3);
+        }
+
+        .server-card h2 {
+            color: #667eea;
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 0.5rem;
+        }
+
+        .server-card .info {
+            font-size: 0.9rem;
+            line-height: 1.8;
+            color: #333;
+        }
+
+        .server-card .label {
+            font-weight: 600;
+            color: #764ba2;
+        }
+
+        .url-group {
+            background: #f5f5f5;
+            padding: 0.75rem;
+            border-radius: 6px;
+            margin: 0.75rem 0;
+        }
+
+        .url-group a {
+            color: #667eea;
+            text-decoration: none;
+            word-break: break-all;
+        }
+
+        .url-group a:hover {
+            text-decoration: underline;
+        }
+
+        .category {
+            margin-top: 3rem;
+        }
+
+        .category h3 {
+            color: white;
+            font-size: 1.5rem;
+            margin-bottom: 1.5rem;
+            text-align: center;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 600;
+            margin-top: 0.5rem;
+        }
+
+        .status-running {
+            background: #10b981;
+            color: white;
+        }
+
+        .status-todo {
+            background: #f59e0b;
+            color: white;
+        }
+
+        .port {
+            background: #ede9fe;
+            padding: 0.25rem 0.5rem;
+            border-radius: 3px;
+            font-family: 'Monaco', 'Courier New', monospace;
+            color: #764ba2;
+        }
+
+        footer {
+            text-align: center;
+            color: white;
+            margin-top: 3rem;
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎯 Hey.sh Local Development Servers</h1>
+
+        <!-- Application Services -->
+        <div class="category">
+            <h3>🚀 Application Services</h3>
+            <div class="servers-grid">
+                <div class="server-card">
+                    <h2>Frontend (React)</h2>
+                    <div class="info">
+                        <div class="url-group">
+                            <span class="label">Caddy:</span><br>
+                            <a href="http://hey.local">http://hey.local</a>
+                        </div>
+                        <div class="url-group">
+                            <span class="label">Direct (Dev):</span><br>
+                            <a href="http://localhost:5173">http://localhost:5173</a>
+                        </div>
+                        <div>
+                            <span class="label">Port:</span> <span class="port">5173</span><br>
+                            <span class="label">Type:</span> Vite React App
+                        </div>
+                        <span class="status-badge status-running">Running</span>
+                    </div>
+                </div>
+
+                <div class="server-card">
+                    <h2>Backend API</h2>
+                    <div class="info">
+                        <div class="url-group">
+                            <span class="label">Caddy:</span><br>
+                            <a href="http://api.hey.local">http://api.hey.local</a>
+                        </div>
+                        <div class="url-group">
+                            <span class="label">Direct:</span><br>
+                            <a href="http://localhost:8000">http://localhost:8000</a>
+                        </div>
+                        <div>
+                            <span class="label">Port:</span> <span class="port">8000</span><br>
+                            <span class="label">Type:</span> FastAPI<br>
+                            <span class="label">Health:</span> <a href="http://api.hey.local/health">/health</a>
+                        </div>
+                        <span class="status-badge status-running">Running</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Workflow & Data Services -->
+        <div class="category">
+            <h3>⚙️ Workflow & Data Services</h3>
+            <div class="servers-grid">
+                <div class="server-card">
+                    <h2>Temporal Workflows</h2>
+                    <div class="info">
+                        <div class="url-group">
+                            <span class="label">Caddy:</span><br>
+                            <a href="http://temporal.hey.local">http://temporal.hey.local</a>
+                        </div>
+                        <div class="url-group">
+                            <span class="label">Direct:</span><br>
+                            <a href="http://localhost:8080">http://localhost:8080</a>
+                        </div>
+                        <div>
+                            <span class="label">Port:</span> <span class="port">8080</span> (UI)<br>
+                            <span class="label">Server:</span> <span class="port">7233</span><br>
+                            <span class="label">Type:</span> Workflow Engine
+                        </div>
+                        <span class="status-badge status-running">Running</span>
+                    </div>
+                </div>
+
+                <div class="server-card">
+                    <h2>Neo4j (Knowledge Graph)</h2>
+                    <div class="info">
+                        <div class="url-group">
+                            <span class="label">Caddy:</span><br>
+                            <a href="http://neo4j.hey.local">http://neo4j.hey.local</a>
+                        </div>
+                        <div class="url-group">
+                            <span class="label">Direct:</span><br>
+                            <a href="http://localhost:7474">http://localhost:7474</a>
+                        </div>
+                        <div>
+                            <span class="label">Port:</span> <span class="port">7474</span> (UI)<br>
+                            <span class="label">Bolt:</span> <span class="port">7687</span><br>
+                            <span class="label">Type:</span> Graph Database
+                        </div>
+                        <span class="status-badge status-running">Running</span>
+                    </div>
+                </div>
+
+                <div class="server-card">
+                    <h2>Weaviate (Vector DB)</h2>
+                    <div class="info">
+                        <div class="url-group">
+                            <span class="label">Caddy:</span><br>
+                            <a href="http://weaviate.hey.local">http://weaviate.hey.local</a>
+                        </div>
+                        <div class="url-group">
+                            <span class="label">Direct:</span><br>
+                            <a href="http://localhost:8080">http://localhost:8080</a>
+                        </div>
+                        <div>
+                            <span class="label">Port:</span> <span class="port">8080</span><br>
+                            <span class="label">Type:</span> Vector Database
+                        </div>
+                        <span class="status-badge status-running">Running</span>
+                    </div>
+                </div>
+
+                <div class="server-card">
+                    <h2>PostgreSQL</h2>
+                    <div class="info">
+                        <div>
+                            <span class="label">Host:</span> <span class="port">postgres</span><br>
+                            <span class="label">Port:</span> <span class="port">5432</span><br>
+                            <span class="label">Type:</span> Relational Database<br>
+                            <span class="label">User:</span> postgres
+                        </div>
+                        <span class="status-badge status-running">Running</span>
+                    </div>
+                </div>
+
+                <div class="server-card">
+                    <h2>Minio (Object Storage)</h2>
+                    <div class="info">
+                        <div>
+                            <span class="label">Host:</span> <span class="port">minio</span><br>
+                            <span class="label">Port:</span> <span class="port">9000</span> (API)<br>
+                            <span class="label">Console:</span> <span class="port">9001</span><br>
+                            <span class="label">Type:</span> S3-compatible Storage
+                        </div>
+                        <span class="status-badge status-running">Running</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Monitoring Stack -->
+        <div class="category">
+            <h3>📊 Monitoring & Observability</h3>
+            <div class="servers-grid">
+                <div class="server-card">
+                    <h2>Prometheus</h2>
+                    <div class="info">
+                        <div class="url-group">
+                            <span class="label">Caddy:</span><br>
+                            <a href="http://monitoring.hey.local">http://monitoring.hey.local</a>
+                        </div>
+                        <div class="url-group">
+                            <span class="label">Direct:</span><br>
+                            <a href="http://localhost:9090">http://localhost:9090</a>
+                        </div>
+                        <div>
+                            <span class="label">Port:</span> <span class="port">9090</span><br>
+                            <span class="label">Type:</span> Metrics Collection
+                        </div>
+                        <span class="status-badge status-running">Running</span>
+                    </div>
+                </div>
+
+                <div class="server-card">
+                    <h2>Grafana</h2>
+                    <div class="info">
+                        <div class="url-group">
+                            <span class="label">Caddy:</span><br>
+                            <a href="http://grafana.hey.local">http://grafana.hey.local</a>
+                        </div>
+                        <div class="url-group">
+                            <span class="label">Direct:</span><br>
+                            <a href="http://localhost:3001">http://localhost:3001</a>
+                        </div>
+                        <div>
+                            <span class="label">Port:</span> <span class="port">3001</span><br>
+                            <span class="label">Type:</span> Dashboards & Visualization<br>
+                            <span class="label">Login:</span> admin / admin
+                        </div>
+                        <span class="status-badge status-running">Running</span>
+                    </div>
+                </div>
+
+                <div class="server-card">
+                    <h2>AlertManager</h2>
+                    <div class="info">
+                        <div class="url-group">
+                            <span class="label">Caddy:</span><br>
+                            <a href="http://alertmanager.hey.local">http://alertmanager.hey.local</a>
+                        </div>
+                        <div class="url-group">
+                            <span class="label">Direct:</span><br>
+                            <a href="http://localhost:9093">http://localhost:9093</a>
+                        </div>
+                        <div>
+                            <span class="label">Port:</span> <span class="port">9093</span><br>
+                            <span class="label">Type:</span> Alert Management
+                        </div>
+                        <span class="status-badge status-running">Running</span>
+                    </div>
+                </div>
+
+                <div class="server-card">
+                    <h2>Jaeger</h2>
+                    <div class="info">
+                        <div class="url-group">
+                            <span class="label">Caddy:</span><br>
+                            <a href="http://jaeger.hey.local">http://jaeger.hey.local</a>
+                        </div>
+                        <div class="url-group">
+                            <span class="label">Direct:</span><br>
+                            <a href="http://localhost:16686">http://localhost:16686</a>
+                        </div>
+                        <div>
+                            <span class="label">Port:</span> <span class="port">16686</span><br>
+                            <span class="label">Type:</span> Distributed Tracing
+                        </div>
+                        <span class="status-badge status-running">Running</span>
+                    </div>
+                </div>
+
+                <div class="server-card">
+                    <h2>Loki</h2>
+                    <div class="info">
+                        <div class="url-group">
+                            <span class="label">Caddy:</span><br>
+                            <a href="http://loki.hey.local">http://loki.hey.local</a>
+                        </div>
+                        <div class="url-group">
+                            <span class="label">Direct:</span><br>
+                            <a href="http://localhost:3100">http://localhost:3100</a>
+                        </div>
+                        <div>
+                            <span class="label">Port:</span> <span class="port">3100</span><br>
+                            <span class="label">Type:</span> Log Aggregation
+                        </div>
+                        <span class="status-badge status-running">Running</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Quick Commands -->
+        <div style="background: white; border-radius: 12px; padding: 2rem; margin-top: 2rem;">
+            <h3 style="color: #667eea; margin-bottom: 1rem;">🔧 Quick Commands</h3>
+            <pre style="background: #f5f5f5; padding: 1rem; border-radius: 6px; overflow-x: auto; font-size: 0.85rem;">
+# Start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f api
+
+# Health checks
+curl http://api.hey.local/health/ready
+curl http://monitoring.hey.local/api/v1/query
+
+# Reload Caddy after config changes
+docker-compose exec caddy caddy reload --config /etc/caddy/Caddyfile
+
+# See all services
+docker-compose ps
+            </pre>
+        </div>
+
+        <footer>
+            <p>🎯 Hey.sh Local Development Dashboard | Updated: 2025-10-21</p>
+        </footer>
+    </div>
+</body>
+</html>

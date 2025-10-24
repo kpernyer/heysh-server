@@ -1,0 +1,32 @@
+# Storage Worker Dockerfile
+# Optimized for database operations and file I/O
+
+FROM python:3.12-slim
+
+# Install system dependencies for database clients
+RUN apt-get update && apt-get install -y \
+    postgresql-client \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+
+# Copy application code
+COPY . .
+
+# Install Python dependencies from pyproject.toml
+RUN pip install --no-cache-dir -e .
+
+# Create cache directory for document processing
+RUN mkdir -p /app/cache
+
+ENV WORKER_TYPES=storage
+
+EXPOSE 8080
+
+# Health check for Docker/local testing
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Run the storage worker
+CMD ["python", "-m", "worker.multiqueue_worker"]

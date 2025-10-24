@@ -1,0 +1,1215 @@
+# Cursor Rules for DevOps & Infrastructure
+
+## Caddy & Hostname Management
+
+### Caddy Configuration
+- Use real hostnames instead of localhost and port numbers
+- Define all hostnames and ports in centralized configuration
+- Use Caddy for reverse proxy and SSL termination
+- Implement proper routing for all services
+
+### Port Management
+- Define all ports in centralized configuration to prevent conflicts
+- Use strict port allocation - no dynamic port assignment
+- Different ports for different environments (dev/staging/prod)
+- Validate port ranges and uniqueness
+
+### Configuration Centralization
+- Define all hostnames and ports in single configuration file
+- Use environment-specific configurations
+- Implement proper validation for all configuration values
+- Use Pydantic for configuration validation
+
+## Justfile (Task Runner) Patterns
+
+### Justfile Structure & Organization
+- Use descriptive recipe names with clear purposes
+- Group related recipes with comments
+- Use consistent parameter patterns
+- Implement proper error handling and validation
+- Use environment variables for configuration
+
+```justfile
+# ✅ Justfile structure
+# Development & Testing
+# ====================
+
+# Install dependencies and setup development environment
+setup:
+    @echo "Setting up development environment..."
+    python -m pip install --upgrade pip
+    pip install -e ".[dev]"
+    pre-commit install
+    @echo "Development environment ready!"
+
+# Run all code quality checks
+lint:
+    @echo "Running code quality checks..."
+    ruff check . --fix
+    black . --check
+    mypy .
+    @echo "Code quality checks completed!"
+
+# Format code
+format:
+    @echo "Formatting code..."
+    black .
+    ruff check . --fix
+    @echo "Code formatted!"
+
+# Run tests with coverage
+test:
+    @echo "Running tests..."
+    pytest test/ -v --cov=. --cov-report=term-missing --cov-report=html
+    @echo "Tests completed!"
+
+# Run specific test category
+test-unit:
+    @echo "Running unit tests..."
+    pytest test/unit/ -v
+
+test-integration:
+    @echo "Running integration tests..."
+    pytest test/integration/ -v
+
+test-e2e:
+    @echo "Running end-to-end tests..."
+    pytest test/e2e/ -v
+
+# Development server
+dev:
+    @echo "Starting development server..."
+    uvicorn service.api:app --reload --host 0.0.0.0 --port 8000
+
+# Backend Development
+# ===================
+
+# Start all backend services
+backend-up:
+    @echo "Starting backend services..."
+    docker-compose -f docker-compose.dev.yml up -d
+    @echo "Backend services started!"
+    @echo "Access services at:"
+    @echo "  App: https://dev.hey.sh"
+    @echo "  API: https://dev-api.hey.sh"
+    @echo "  Temporal: https://temporal.hey.sh"
+
+# Stop all backend services
+backend-down:
+    @echo "Stopping backend services..."
+    docker-compose -f docker-compose.dev.yml down
+    @echo "Backend services stopped!"
+
+# Restart backend services
+backend-restart: backend-down backend-up
+
+# View backend logs
+backend-logs:
+    docker-compose -f docker-compose.dev.yml logs -f
+
+# Database operations
+db-migrate:
+    @echo "Running database migrations..."
+    alembic upgrade head
+    @echo "Database migrations completed!"
+
+db-rollback:
+    @echo "Rolling back database migrations..."
+    alembic downgrade -1
+    @echo "Database rollback completed!"
+
+db-reset:
+    @echo "Resetting database..."
+    alembic downgrade base
+    alembic upgrade head
+    @echo "Database reset completed!"
+
+# Temporal operations
+temporal-start:
+    @echo "Starting Temporal server..."
+    temporal server start-dev --ip 0.0.0.0 --port 7233
+    @echo "Temporal server started!"
+
+temporal-ui:
+    @echo "Opening Temporal UI..."
+    open https://temporal.hey.sh
+
+# Frontend Development
+# ===================
+
+# Install frontend dependencies
+frontend-install:
+    @echo "Installing frontend dependencies..."
+    cd frontend && npm install
+    @echo "Frontend dependencies installed!"
+
+# Start frontend development server
+frontend-dev:
+    @echo "Starting frontend development server..."
+    cd frontend && npm run dev
+
+# Build frontend for production
+frontend-build:
+    @echo "Building frontend for production..."
+    cd frontend && npm run build
+    @echo "Frontend build completed!"
+
+# Frontend testing
+frontend-test:
+    @echo "Running frontend tests..."
+    cd frontend && npm run test
+
+frontend-lint:
+    @echo "Running frontend linting..."
+    cd frontend && npm run lint
+
+frontend-format:
+    @echo "Formatting frontend code..."
+    cd frontend && npm run format
+
+# Docker Operations
+# ================
+
+# Build all Docker images
+docker-build:
+    @echo "Building Docker images..."
+    docker build -t hey-sh-backend:latest .
+    docker build -t hey-sh-frontend:latest -f Dockerfile.frontend .
+    @echo "Docker images built!"
+
+# Build specific image
+docker-build-backend:
+    @echo "Building backend image..."
+    docker build -t hey-sh-backend:latest .
+
+docker-build-frontend:
+    @echo "Building frontend image..."
+    docker build -t hey-sh-frontend:latest -f Dockerfile.frontend .
+
+# Run Docker containers
+docker-run:
+    @echo "Running Docker containers..."
+    docker-compose up -d
+    @echo "Docker containers started!"
+
+# Stop Docker containers
+docker-stop:
+    @echo "Stopping Docker containers..."
+    docker-compose down
+    @echo "Docker containers stopped!"
+
+# Clean Docker resources
+docker-clean:
+    @echo "Cleaning Docker resources..."
+    docker system prune -f
+    docker volume prune -f
+    @echo "Docker cleanup completed!"
+
+# Kubernetes Operations
+# ====================
+
+# Apply Kubernetes manifests
+k8s-apply:
+    @echo "Applying Kubernetes manifests..."
+    kubectl apply -f k8s/
+    @echo "Kubernetes manifests applied!"
+
+# Delete Kubernetes resources
+k8s-delete:
+    @echo "Deleting Kubernetes resources..."
+    kubectl delete -f k8s/
+    @echo "Kubernetes resources deleted!"
+
+# Get Kubernetes status
+k8s-status:
+    @echo "Kubernetes status:"
+    kubectl get pods
+    kubectl get services
+    kubectl get ingress
+
+# Port forward to services
+k8s-port-forward:
+    @echo "Setting up port forwarding..."
+    kubectl port-forward service/backend-service 8000:8000 &
+    kubectl port-forward service/frontend-service 3000:3000 &
+    @echo "Port forwarding active!"
+
+# CI/CD Operations
+# ================
+
+# Run CI pipeline locally
+ci-local:
+    @echo "Running CI pipeline locally..."
+    just lint
+    just test
+    just docker-build
+    @echo "CI pipeline completed locally!"
+
+# Deploy to staging
+deploy-staging:
+    @echo "Deploying to staging..."
+    gcloud builds submit --config cloudbuild.staging.yaml
+    @echo "Staging deployment completed!"
+
+# Deploy to production
+deploy-production:
+    @echo "Deploying to production..."
+    gcloud builds submit --config cloudbuild.prod.yaml
+    @echo "Production deployment completed!"
+
+# Database backup
+db-backup:
+    @echo "Creating database backup..."
+    pg_dump $DATABASE_URL > backup_$(date +%Y%m%d_%H%M%S).sql
+    @echo "Database backup completed!"
+
+# Database restore
+db-restore backup_file:
+    @echo "Restoring database from backup..."
+    psql $DATABASE_URL < {{backup_file}}
+    @echo "Database restore completed!"
+
+# Monitoring & Logs
+# ================
+
+# View application logs
+logs:
+    @echo "Viewing application logs..."
+    kubectl logs -f deployment/backend-deployment
+    kubectl logs -f deployment/frontend-deployment
+
+# Check application health
+health:
+    @echo "Checking application health..."
+    curl -f https://api.hey.sh/health || echo "Backend health check failed"
+    curl -f https://app.hey.sh/health || echo "Frontend health check failed"
+
+# Performance monitoring
+monitor:
+    @echo "Starting performance monitoring..."
+    kubectl top pods
+    kubectl top nodes
+
+# Security & Compliance
+# ====================
+
+# Run security scans
+security-scan:
+    @echo "Running security scans..."
+    bandit -r . -f json -o security-report.json
+    safety check
+    @echo "Security scans completed!"
+
+# Update dependencies
+update-deps:
+    @echo "Updating dependencies..."
+    pip-compile requirements.in
+    pip-compile requirements-dev.in
+    @echo "Dependencies updated!"
+
+# Audit dependencies
+audit-deps:
+    @echo "Auditing dependencies..."
+    safety check
+    pip-audit
+    @echo "Dependency audit completed!"
+```
+
+## Linting & Code Quality
+
+### Python Linting Configuration
+```python
+# ✅ pyproject.toml linting configuration
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "N",   # pep8-naming
+    "D",   # pydocstyle
+    "S",   # flake8-bandit
+    "T",   # flake8-debugger
+    "Q",   # flake8-quotes
+    "RUF", # ruff-specific rules
+]
+ignore = [
+    "E501",  # line too long (handled by black)
+    "B008",  # do not perform function calls in argument defaults
+    "W191",  # indentation contains tabs
+    "D100",  # Missing docstring in public module
+    "D104",  # Missing docstring in public package
+    "S101",  # Use of assert detected
+]
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+"test/*" = ["S101", "D100", "D104"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src", "workflow", "activity", "worker", "service"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.black]
+line-length = 100
+target-version = ['py311']
+include = '\.pyi?$'
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+plugins = ["pydantic.mypy"]
+
+[[tool.mypy.overrides]]
+module = "tests.*"
+disallow_untyped_defs = false
+
+[tool.pytest.ini_options]
+testpaths = ["test"]
+asyncio_mode = "auto"
+addopts = "-v --cov=. --cov-report=term-missing --cov-report=html"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "e2e: marks tests as end-to-end tests",
+]
+
+[tool.coverage.run]
+source = ["."]
+omit = [
+    "test/*",
+    "*/tests/*",
+    "*/__pycache__/*",
+    "*/site-packages/*",
+    "*/migrations/*",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "@abstractmethod",
+]
+```
+
+### Pre-commit Configuration
+```yaml
+# ✅ .pre-commit-config.yaml
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.4.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-added-large-files
+      - id: check-merge-conflict
+      - id: check-json
+      - id: check-toml
+      - id: check-xml
+      - id: debug-statements
+      - id: check-docstring-first
+
+  - repo: https://github.com/psf/black
+    rev: 23.7.0
+    hooks:
+      - id: black
+        language_version: python3.11
+
+  - repo: https://github.com/charliermarsh/ruff-pre-commit
+    rev: v0.0.284
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.5.1
+    hooks:
+      - id: mypy
+        additional_dependencies: [types-all]
+        args: [--ignore-missing-imports]
+
+  - repo: https://github.com/PyCQA/bandit
+    rev: 1.7.5
+    hooks:
+      - id: bandit
+        args: [-r, ., -f, json, -o, bandit-report.json]
+
+  - repo: https://github.com/Lucas-C/pre-commit-hooks-safety
+    rev: v1.3.2
+    hooks:
+      - id: python-safety-dependencies-check
+```
+
+## CI/CD Pipeline Configuration
+
+### GitHub Actions Workflow
+```yaml
+# ✅ .github/workflows/ci.yml
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+
+env:
+  PYTHON_VERSION: "3.11"
+  NODE_VERSION: "18"
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
+      - name: Cache Python dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+
+      - name: Cache Node dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[dev]"
+
+      - name: Install Node dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Run Python linting
+        run: |
+          ruff check . --fix
+          black . --check
+          mypy .
+
+      - name: Run Node linting
+        run: |
+          cd frontend
+          npm run lint
+
+      - name: Run Python tests
+        run: |
+          pytest test/ -v --cov=. --cov-report=xml
+
+      - name: Run Node tests
+        run: |
+          cd frontend
+          npm run test
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          file: ./coverage.xml
+          flags: unittests
+          name: codecov-umbrella
+
+  security-scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install bandit safety
+
+      - name: Run security scan
+        run: |
+          bandit -r . -f json -o bandit-report.json
+          safety check
+
+      - name: Upload security report
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-report
+          path: bandit-report.json
+
+  build-and-test:
+    runs-on: ubuntu-latest
+    needs: [lint-and-test, security-scan]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build backend image
+        run: |
+          docker build -t hey-sh-backend:latest .
+
+      - name: Build frontend image
+        run: |
+          docker build -t hey-sh-frontend:latest -f Dockerfile.frontend .
+
+      - name: Run integration tests
+        run: |
+          docker-compose -f docker-compose.test.yml up -d
+          sleep 30
+          docker-compose -f docker-compose.test.yml exec -T backend pytest test/integration/
+          docker-compose -f docker-compose.test.yml down
+
+  deploy-staging:
+    runs-on: ubuntu-latest
+    needs: [build-and-test]
+    if: github.ref == 'refs/heads/develop'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Configure Docker for GCR
+        run: gcloud auth configure-docker
+
+      - name: Build and push images
+        run: |
+          docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/hey-sh-backend:latest .
+          docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/hey-sh-frontend:latest -f Dockerfile.frontend .
+          docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/hey-sh-backend:latest
+          docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/hey-sh-frontend:latest
+
+      - name: Deploy to staging
+        run: |
+          gcloud builds submit --config cloudbuild.staging.yaml
+
+  deploy-production:
+    runs-on: ubuntu-latest
+    needs: [build-and-test]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Google Cloud CLI
+        uses: google-github-actions/setup-gcloud@v1
+        with:
+          service_account_key: ${{ secrets.GCP_SA_KEY }}
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Configure Docker for GCR
+        run: gcloud auth configure-docker
+
+      - name: Build and push images
+        run: |
+          docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/hey-sh-backend:latest .
+          docker build -t gcr.io/${{ secrets.GCP_PROJECT_ID }}/hey-sh-frontend:latest -f Dockerfile.frontend .
+          docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/hey-sh-backend:latest
+          docker push gcr.io/${{ secrets.GCP_PROJECT_ID }}/hey-sh-frontend:latest
+
+      - name: Deploy to production
+        run: |
+          gcloud builds submit --config cloudbuild.prod.yaml
+```
+
+## Docker Configuration
+
+### Multi-stage Dockerfile
+```dockerfile
+# ✅ Dockerfile for backend
+FROM python:3.11-slim as base
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1 \
+    PYTHONDONTWRITEBYTECODE=1 \
+    PIP_NO_CACHE_DIR=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create non-root user
+RUN groupadd -r appuser && useradd -r -g appuser appuser
+
+# Set work directory
+WORKDIR /app
+
+# Install Python dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Change ownership to non-root user
+RUN chown -R appuser:appuser /app
+USER appuser
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=30s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Run application
+CMD ["uvicorn", "service.api:app", "--host", "0.0.0.0", "--port", "8000"]
+
+# ✅ Development stage
+FROM base as development
+
+# Install development dependencies
+COPY requirements-dev.txt .
+RUN pip install --no-cache-dir -r requirements-dev.txt
+
+# Override command for development
+CMD ["uvicorn", "service.api:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+# ✅ Production stage
+FROM base as production
+
+# Copy only necessary files
+COPY --from=base /app /app
+
+# Run application
+CMD ["uvicorn", "service.api:app", "--host", "0.0.0.0", "--port", "8000"]
+```
+
+### Docker Compose Configuration with Caddy
+```yaml
+# ✅ docker-compose.yml
+version: '3.8'
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - CADDY_INGRESS_NETWORKS=caddy
+    networks:
+      - caddy
+      - app
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: production
+    environment:
+      - DATABASE_URL=postgresql://user:password@postgres:5432/hey_sh
+      - REDIS_URL=redis://redis:6379
+      - TEMPORAL_ADDRESS=temporal:7233
+    depends_on:
+      - postgres
+      - redis
+      - temporal
+    networks:
+      - app
+    restart: unless-stopped
+    # No external ports - accessed through Caddy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    environment:
+      - REACT_APP_API_URL=https://api.hey.sh
+    networks:
+      - app
+    restart: unless-stopped
+    # No external ports - accessed through Caddy
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=hey_sh
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app
+    restart: unless-stopped
+    # No external ports - internal service only
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    networks:
+      - app
+    restart: unless-stopped
+    # No external ports - internal service only
+
+  temporal:
+    image: temporalio/auto-setup:latest
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=user
+      - POSTGRES_PWD=password
+      - POSTGRES_SEEDS=postgres
+    depends_on:
+      - postgres
+    networks:
+      - app
+    restart: unless-stopped
+    # No external ports - accessed through Caddy
+
+volumes:
+  caddy_data:
+  caddy_config:
+  postgres_data:
+  redis_data:
+
+networks:
+  caddy:
+    external: true
+  app:
+    driver: bridge
+```
+
+## Kubernetes Configuration
+
+### Namespace and ConfigMap
+```yaml
+# ✅ k8s/namespace.yaml
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: hey-sh
+  labels:
+    name: hey-sh
+    environment: production
+
+---
+# ✅ k8s/configmap.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: hey-sh-config
+  namespace: hey-sh
+data:
+  DATABASE_URL: "postgresql://user:password@postgres-service:5432/hey_sh"
+  REDIS_URL: "redis://redis-service:6379"
+  TEMPORAL_ADDRESS: "temporal-service:7233"
+  LOG_LEVEL: "INFO"
+  ENVIRONMENT: "production"
+```
+
+### Backend Deployment
+```yaml
+# ✅ k8s/backend-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: backend-deployment
+  namespace: hey-sh
+  labels:
+    app: backend
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: backend
+  template:
+    metadata:
+      labels:
+        app: backend
+    spec:
+      containers:
+      - name: backend
+        image: gcr.io/hey-sh-project/backend:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: hey-sh-config
+              key: DATABASE_URL
+        - name: REDIS_URL
+          valueFrom:
+            configMapKeyRef:
+              name: hey-sh-config
+              key: REDIS_URL
+        - name: TEMPORAL_ADDRESS
+          valueFrom:
+            configMapKeyRef:
+              name: hey-sh-config
+              key: TEMPORAL_ADDRESS
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "250m"
+          limits:
+            memory: "512Mi"
+            cpu: "500m"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        volumeMounts:
+        - name: logs
+          mountPath: /app/logs
+      volumes:
+      - name: logs
+        emptyDir: {}
+      restartPolicy: Always
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: backend-service
+  namespace: hey-sh
+spec:
+  selector:
+    app: backend
+  ports:
+  - port: 8000
+    targetPort: 8000
+  type: ClusterIP
+```
+
+### Frontend Deployment
+```yaml
+# ✅ k8s/frontend-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-deployment
+  namespace: hey-sh
+  labels:
+    app: frontend
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: gcr.io/hey-sh-project/frontend:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: REACT_APP_API_URL
+          value: "http://backend-service:8000"
+        resources:
+          requests:
+            memory: "128Mi"
+            cpu: "100m"
+          limits:
+            memory: "256Mi"
+            cpu: "200m"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 3000
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: hey-sh
+spec:
+  selector:
+    app: frontend
+  ports:
+  - port: 3000
+    targetPort: 3000
+  type: ClusterIP
+```
+
+### Ingress Configuration
+```yaml
+# ✅ k8s/ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hey-sh-ingress
+  namespace: hey-sh
+  annotations:
+    kubernetes.io/ingress.class: "nginx"
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+spec:
+  tls:
+  - hosts:
+    - api.hey.sh
+    - app.hey.sh
+    secretName: hey-sh-tls
+  rules:
+  - host: api.hey.sh
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-service
+            port:
+              number: 8000
+  - host: app.hey.sh
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-service
+            port:
+              number: 3000
+```
+
+## Monitoring & Observability
+
+### Prometheus Configuration
+```yaml
+# ✅ k8s/prometheus.yaml
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: hey-sh
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    scrape_configs:
+    - job_name: 'backend'
+      static_configs:
+      - targets: ['backend-service:8000']
+      metrics_path: '/metrics'
+
+    - job_name: 'frontend'
+      static_configs:
+      - targets: ['frontend-service:3000']
+      metrics_path: '/metrics'
+```
+
+### Grafana Dashboard
+```yaml
+# ✅ k8s/grafana.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana
+  namespace: hey-sh
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:latest
+        ports:
+        - containerPort: 3000
+        env:
+        - name: GF_SECURITY_ADMIN_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: grafana-secret
+              key: admin-password
+        volumeMounts:
+        - name: grafana-storage
+          mountPath: /var/lib/grafana
+      volumes:
+      - name: grafana-storage
+        persistentVolumeClaim:
+          claimName: grafana-pvc
+```
+
+## Documentation Organization
+
+### Documentation Structure
+- Place all documentation under `docs/` directory
+- Organize documentation by category and purpose
+- Use consistent naming conventions
+- Generate documentation from configuration
+
+### Documentation Categories
+```
+docs/
+├── README.md                    # Main documentation
+├── SETUP.md                     # Setup instructions
+├── DEPLOYMENT.md                # Deployment guide
+├── API.md                       # API documentation
+├── ARCHITECTURE.md              # Architecture overview
+├── DEVELOPMENT.md               # Development guide
+├── MONITORING.md                # Monitoring guide
+├── TROUBLESHOOTING.md           # Troubleshooting guide
+├── SECURITY.md                  # Security guide
+├── CONTRIBUTING.md              # Contributing guide
+├── CHANGELOG.md                 # Change log
+├── LICENSE.md                   # License information
+├── api/                         # API documentation
+│   ├── endpoints.md
+│   ├── authentication.md
+│   └── examples.md
+├── deployment/                  # Deployment documentation
+│   ├── docker.md
+│   ├── kubernetes.md
+│   ├── caddy.md
+│   └── monitoring.md
+├── development/                 # Development documentation
+│   ├── setup.md
+│   ├── testing.md
+│   ├── linting.md
+│   └── debugging.md
+└── architecture/                # Architecture documentation
+    ├── overview.md
+    ├── services.md
+    ├── data-flow.md
+    └── security.md
+```
+
+## Best Practices Summary
+
+### Caddy & Hostname Management
+- Use real hostnames instead of localhost and port numbers
+- Define all hostnames and ports in centralized configuration
+- Use Caddy for reverse proxy and SSL termination
+- Implement proper routing for all services
+
+### Port Management
+- Define all ports in centralized configuration to prevent conflicts
+- Use strict port allocation - no dynamic port assignment
+- Different ports for different environments (dev/staging/prod)
+- Validate port ranges and uniqueness
+
+### Configuration Centralization
+- Define all hostnames and ports in single configuration file
+- Use environment-specific configurations
+- Implement proper validation for all configuration values
+- Use Pydantic for configuration validation
+
+### Justfile Best Practices
+- Use descriptive recipe names
+- Group related recipes with comments
+- Implement proper error handling
+- Use environment variables for configuration
+- Provide helpful output messages
+
+### Linting Best Practices
+- Use multiple linters for comprehensive coverage
+- Configure pre-commit hooks for automatic checks
+- Use consistent formatting with Black and Ruff
+- Implement security scanning with Bandit
+- Use type checking with MyPy
+
+### CI/CD Best Practices
+- Use multi-stage pipelines for efficiency
+- Implement proper caching for dependencies
+- Run security scans in CI/CD
+- Use proper secret management
+- Implement rollback strategies
+
+### Docker Best Practices
+- Use multi-stage builds for optimization
+- Implement proper health checks
+- Use non-root users for security
+- Optimize layer caching
+- Use specific image tags
+
+### Kubernetes Best Practices
+- Use proper resource limits and requests
+- Implement health checks and probes
+- Use ConfigMaps and Secrets appropriately
+- Implement proper networking and ingress
+- Use monitoring and observability tools

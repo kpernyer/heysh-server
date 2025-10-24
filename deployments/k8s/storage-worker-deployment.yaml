@@ -1,0 +1,155 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: storage-worker
+  namespace: temporal-workers
+  labels:
+    app: temporal-worker
+    worker-type: storage
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: temporal-worker
+      worker-type: storage
+  template:
+    metadata:
+      labels:
+        app: temporal-worker
+        worker-type: storage
+    spec:
+      nodeSelector:
+        workload-type: storage-optimized
+      containers:
+      - name: storage-worker
+        image: ${REGISTRY}/hey-sh-storage-worker:${VERSION}
+        imagePullPolicy: Always
+        env:
+        - name: WORKER_TYPES
+          value: "storage"
+        - name: TEMPORAL_ADDRESS
+          valueFrom:
+            configMapKeyRef:
+              name: temporal-config
+              key: address
+        - name: TEMPORAL_NAMESPACE
+          valueFrom:
+            configMapKeyRef:
+              name: temporal-config
+              key: namespace
+        - name: SUPABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: supabase-url
+        - name: SUPABASE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: supabase-key
+        - name: WEAVIATE_URL
+          valueFrom:
+            configMapKeyRef:
+              name: database-config
+              key: weaviate-url
+        - name: NEO4J_URI
+          valueFrom:
+            configMapKeyRef:
+              name: database-config
+              key: neo4j-uri
+        - name: NEO4J_USER
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: neo4j-user
+        - name: NEO4J_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: neo4j-password
+        resources:
+          requests:
+            memory: "4Gi"
+            cpu: "1"
+            ephemeral-storage: "10Gi"
+          limits:
+            memory: "8Gi"
+            cpu: "2"
+            ephemeral-storage: "20Gi"
+        volumeMounts:
+        - name: cache
+          mountPath: /app/cache
+        - name: temp
+          mountPath: /tmp
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 20
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+      volumes:
+      - name: cache
+        persistentVolumeClaim:
+          claimName: storage-worker-cache
+      - name: temp
+        emptyDir:
+          sizeLimit: 5Gi
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: storage-worker-cache
+  namespace: temporal-workers
+spec:
+  accessModes:
+    - ReadWriteMany
+  storageClassName: fast-ssd
+  resources:
+    requests:
+      storage: 50Gi
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: storage-worker
+  namespace: temporal-workers
+spec:
+  selector:
+    app: temporal-worker
+    worker-type: storage
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: health
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: storage-worker-hpa
+  namespace: temporal-workers
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: storage-worker
+  minReplicas: 2
+  maxReplicas: 10
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 60
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 70

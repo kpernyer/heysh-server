@@ -1,0 +1,604 @@
+# Cursor Rules for hey.sh Backend Architecture
+
+## Directory Structure & Organization
+
+### Singular Directory Convention
+- Use singular directory names: `workflow/`, `activity/`, `worker/`, `service/`
+- Group related functionality in modules within each directory
+- Keep `__init__.py` files minimal and focused
+- Use absolute imports from project root
+
+### Required Directory Structure
+```
+backend/
+├── workflow/         # Temporal workflow definitions
+├── activity/         # Temporal activities
+├── worker/          # Temporal workers
+├── service/         # FastAPI services
+├── src/app/         # Core business logic (Clean Architecture)
+│   ├── clients/     # Database/API clients
+│   ├── models/      # Data models (Supabase)
+│   ├── schemas/     # Pydantic schemas
+│   └── utils/       # Utilities
+├── prompt/          # Prompts-as-code
+│   ├── coding/      # *.prompt.md (code generation)
+│   └── api-calling/ # *.prompt.yaml (LLM API calls)
+├── tool/            # Development tools
+├── script/          # Executable scripts
+├── test/            # Tests
+├── infra/           # Infrastructure as code
+└── docker/          # Docker configurations
+```
+
+## Clean Architecture Implementation
+
+### Dependency Rule Enforcement
+The dependency rule is CRITICAL and must be enforced:
+
+```python
+# ✅ ALLOWED imports by module type:
+workflow/     -> activity/, src.app
+activity/     -> src.app
+worker/       -> workflow/, activity/, src.app
+service/      -> src.app, workflow/
+src.app/      -> [] (NO orchestration imports allowed)
+
+# ❌ FORBIDDEN imports:
+src.app/      -> workflow/, activity/, worker/, service/
+```
+
+### Core Business Logic (src/app/)
+- Contains entities, use cases, and business rules
+- Must be independent of external frameworks
+- No imports from orchestration layers
+- Pure business logic with clear interfaces
+
+### Orchestration Layers
+- **workflow/**: Temporal workflow definitions
+- **activity/**: Temporal activities (business operations)
+- **worker/**: Temporal workers (process orchestration)
+- **service/**: FastAPI services (API layer)
+
+## Temporal Workflow Architecture
+
+### Workflow Definition Pattern
+```python
+@workflow.defn
+class FeatureWorkflow:
+    """Brief description of workflow purpose and business value."""
+
+    @workflow.run
+    async def run(self, input_data: InputType) -> OutputType:
+        """Main workflow execution method."""
+        logger = workflow.logger()
+
+        try:
+            # Workflow orchestration logic
+            result = await workflow.execute_activity(
+                activity_name,
+                input_data,
+                start_to_close_timeout=timedelta(minutes=5),
+                retry_policy=workflow.RetryPolicy(
+                    initial_interval=timedelta(seconds=1),
+                    maximum_interval=timedelta(seconds=30),
+                    maximum_attempts=3,
+                ),
+            )
+
+            return result
+
+        except Exception as e:
+            logger.error("Workflow failed", error=str(e))
+            raise
+```
+
+### Activity Definition Pattern
+```python
+@activity.defn
+async def business_operation_activity(input_data: InputType) -> OutputType:
+    """Clear description of business operation and value."""
+    logger = activity.logger()
+
+    try:
+        # Business operation implementation
+        # Use clients from src.app.clients
+        # Return structured data
+
+        logger.info("Activity completed", operation="business_operation")
+        return result
+
+    except Exception as e:
+        logger.error("Activity failed", error=str(e))
+        raise
+```
+
+### Worker Definition Pattern
+```python
+async def create_worker(client: Client, task_queue: str) -> Worker:
+    """Create worker with proper activity and workflow registration."""
+
+    return Worker(
+        client,
+        task_queue=task_queue,
+        workflows=[FeatureWorkflow],
+        activities=[
+            business_operation_activity,
+            # ... other activities
+        ],
+    )
+```
+
+## Data Model Architecture
+
+### BaseModel Pattern
+All data models must inherit from `BaseModel`:
+
+```python
+class FeatureModel(BaseModel):
+    """Data model for [Feature] operations."""
+
+    table_name = "feature_table"
+
+    @classmethod
+    async def get_by_feature_criteria(cls, criteria: dict) -> list[dict]:
+        """Get items by specific business criteria."""
+        # Implementation using parent class methods
+        pass
+```
+
+### Model Responsibilities
+- Database operations (CRUD)
+- Data validation and transformation
+- Business rule enforcement
+- Error handling and logging
+- Connection management
+
+### Client Architecture
+```python
+# src/app/clients/
+class DatabaseClient:
+    """Base client for database operations."""
+
+    @abstractmethod
+    async def connect(self) -> None:
+        """Establish database connection."""
+        pass
+
+    @abstractmethod
+    async def disconnect(self) -> None:
+        """Close database connection."""
+        pass
+
+class SupabaseClient(DatabaseClient):
+    """Supabase client implementation."""
+
+    def __init__(self, url: str, key: str):
+        self.url = url
+        self.key = key
+        self._client: Optional[Client] = None
+
+    async def connect(self) -> None:
+        """Connect to Supabase."""
+        # Implementation
+```
+
+## API Service Architecture
+
+### FastAPI Service Pattern
+```python
+# service/feature_service.py
+from fastapi import APIRouter, Depends, HTTPException
+from src.app.models.feature import FeatureModel
+from src.app.schemas.feature import FeatureCreate, FeatureResponse
+
+router = APIRouter(prefix="/api/features", tags=["features"])
+
+@router.post("/", response_model=FeatureResponse)
+async def create_feature(
+    feature_data: FeatureCreate,
+    feature_model: FeatureModel = Depends(get_feature_model)
+) -> FeatureResponse:
+    """Create new feature with proper validation."""
+
+    try:
+        result = await feature_model.create(feature_data.dict())
+        return FeatureResponse(**result)
+
+    except Exception as e:
+        logger.error("Failed to create feature", error=str(e))
+        raise HTTPException(status_code=500, detail="Internal server error")
+```
+
+### Service Layer Responsibilities
+- HTTP request/response handling
+- Input validation with Pydantic
+- Business logic delegation to models
+- Error handling and HTTP status codes
+- Authentication and authorization
+- Rate limiting and security
+
+## Prompt-as-Code Architecture
+
+### Coding Prompts (*.prompt.md)
+```yaml
+---
+id: prompt-name
+version: 1
+audience: "Claude|Cursor|Cline"
+purpose: "Clear description of prompt purpose"
+---
+
+# Prompt Title
+
+## Requirements
+- Specific requirements
+- Code patterns to follow
+- Architecture constraints
+
+## Template
+```python
+# Code template here
+```
+```
+
+### API-Calling Prompts (*.prompt.yaml)
+```yaml
+version: 1
+model: "gpt-4"
+system: |
+  System prompt for LLM API calls
+
+user_template: |
+  User prompt template with {variables}
+
+variables:
+  - name: "variable_name"
+    description: "Variable description"
+    required: true
+```
+
+## Infrastructure Patterns
+
+### Docker Configuration
+```dockerfile
+# Multi-stage build for production
+FROM python:3.11-slim as base
+# ... base setup
+
+FROM base as development
+# ... development dependencies
+
+FROM base as production
+# ... production optimizations
+```
+
+### Kubernetes Deployment
+```yaml
+# k8s/feature-deployment.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: feature-service
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: feature-service
+  template:
+    metadata:
+      labels:
+        app: feature-service
+    spec:
+      containers:
+      - name: feature-service
+        image: feature-service:latest
+        ports:
+        - containerPort: 8000
+        env:
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: database-secret
+              key: url
+```
+
+## Monitoring & Observability
+
+### Structured Logging Pattern
+```python
+import structlog
+
+logger = structlog.get_logger()
+
+# Workflow logging
+logger.info(
+    "Workflow started",
+    workflow_id=workflow_id,
+    input_data=input_data,
+    user_id=user_id
+)
+
+# Activity logging
+logger.info(
+    "Activity completed",
+    activity_name="process_document",
+    duration=duration,
+    result=result
+)
+
+# Error logging
+logger.error(
+    "Operation failed",
+    operation="database_query",
+    error=str(e),
+    context={"query": query, "params": params}
+)
+```
+
+### Health Check Pattern
+```python
+@router.get("/health")
+async def health_check() -> dict:
+    """Health check endpoint for monitoring."""
+
+    checks = {
+        "database": await check_database_connection(),
+        "temporal": await check_temporal_connection(),
+        "external_apis": await check_external_apis(),
+    }
+
+    all_healthy = all(checks.values())
+
+    return {
+        "status": "healthy" if all_healthy else "unhealthy",
+        "checks": checks,
+        "timestamp": datetime.utcnow().isoformat()
+    }
+```
+
+## Security Architecture
+
+### Authentication Pattern
+```python
+from fastapi import Depends, HTTPException, status
+from fastapi.security import HTTPBearer
+
+security = HTTPBearer()
+
+async def get_current_user(token: str = Depends(security)) -> User:
+    """Get current user from JWT token."""
+
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        user_id = payload.get("sub")
+
+        if user_id is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid authentication credentials"
+            )
+
+        return await get_user_by_id(user_id)
+
+    except jwt.PyJWTError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials"
+        )
+```
+
+### Authorization Pattern
+```python
+async def require_permission(permission: str):
+    """Dependency for permission-based authorization."""
+
+    async def permission_checker(current_user: User = Depends(get_current_user)):
+        if not current_user.has_permission(permission):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Insufficient permissions"
+            )
+        return current_user
+
+    return permission_checker
+```
+
+## Configuration Management
+
+### Environment Configuration
+```python
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    """Application settings with environment variable support."""
+
+    # Database
+    database_url: str
+    database_pool_size: int = 10
+
+    # Temporal
+    temporal_address: str = "localhost:7233"
+    temporal_namespace: str = "default"
+
+    # External APIs
+    openai_api_key: str
+    supabase_url: str
+    supabase_key: str
+
+    # Security
+    secret_key: str
+    algorithm: str = "HS256"
+    access_token_expire_minutes: int = 30
+
+    class Config:
+        env_file = ".env"
+        case_sensitive = False
+
+settings = Settings()
+```
+
+## Error Handling Architecture
+
+### Custom Exception Hierarchy
+```python
+class HeyShException(Exception):
+    """Base exception for hey.sh application."""
+
+    def __init__(self, message: str, error_code: str = None):
+        self.message = message
+        self.error_code = error_code
+        super().__init__(self.message)
+
+class ValidationError(HeyShException):
+    """Validation error."""
+    pass
+
+class BusinessLogicError(HeyShException):
+    """Business logic error."""
+    pass
+
+class ExternalServiceError(HeyShException):
+    """External service error."""
+    pass
+```
+
+### Error Handling Middleware
+```python
+from fastapi import Request
+from fastapi.responses import JSONResponse
+
+@app.exception_handler(HeyShException)
+async def hey_sh_exception_handler(request: Request, exc: HeyShException):
+    """Handle custom application exceptions."""
+
+    return JSONResponse(
+        status_code=400,
+        content={
+            "error": exc.error_code or "application_error",
+            "message": exc.message,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    )
+```
+
+## Testing Architecture
+
+### Test Organization
+```
+test/
+├── unit/           # Unit tests for individual components
+├── integration/    # Integration tests for component interactions
+├── e2e/           # End-to-end tests for complete workflows
+├── load/          # Load and performance tests
+└── fixtures/      # Test fixtures and utilities
+```
+
+### Test Fixture Architecture
+```python
+# test/fixtures/temporal.py
+@pytest.fixture
+async def temporal_test_environment():
+    """Set up complete Temporal test environment."""
+
+    # Start Temporal server
+    # Create test namespace
+    # Set up test workers
+    # Configure test activities
+
+    yield test_environment
+
+    # Cleanup test environment
+```
+
+## Deployment Architecture
+
+### Multi-Environment Configuration
+```python
+# config/environments/
+class DevelopmentConfig(Settings):
+    """Development environment configuration."""
+    debug: bool = True
+    log_level: str = "DEBUG"
+
+class StagingConfig(Settings):
+    """Staging environment configuration."""
+    debug: bool = False
+    log_level: str = "INFO"
+
+class ProductionConfig(Settings):
+    """Production environment configuration."""
+    debug: bool = False
+    log_level: str = "WARNING"
+```
+
+### CI/CD Pipeline Integration
+```yaml
+# .github/workflows/backend.yml
+name: Backend CI/CD
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install dependencies
+        run: |
+          pip install -e .[dev]
+      - name: Run tests
+        run: |
+          pytest test/ --cov=. --cov-report=xml
+      - name: Run linting
+        run: |
+          ruff check .
+          mypy .
+```
+
+## Performance Architecture
+
+### Caching Strategy
+```python
+from functools import lru_cache
+from typing import Optional
+
+@lru_cache(maxsize=128)
+def get_cached_configuration(config_key: str) -> Optional[dict]:
+    """Cache frequently accessed configuration."""
+    return load_configuration(config_key)
+```
+
+### Connection Pooling
+```python
+class DatabasePool:
+    """Database connection pool for optimal performance."""
+
+    def __init__(self, max_connections: int = 10):
+        self.max_connections = max_connections
+        self._pool: list[Connection] = []
+        self._semaphore = asyncio.Semaphore(max_connections)
+
+    async def get_connection(self) -> Connection:
+        """Get connection from pool."""
+        async with self._semaphore:
+            # Connection management logic
+            pass
+```
+
+This architecture ensures:
+- Clear separation of concerns
+- Enforceable dependency rules
+- Scalable and maintainable code
+- Proper error handling and logging
+- Security best practices
+- Performance optimization
+- Comprehensive testing
+- Production-ready deployment

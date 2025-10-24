@@ -1,0 +1,193 @@
+{
+  "dashboard": {
+    "title": "Document Workflow System Dashboard",
+    "uid": "document-workflow",
+    "version": 1,
+    "timezone": "browser",
+    "panels": [
+      {
+        "id": 1,
+        "title": "Workflow Success Rate",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+        "targets": [
+          {
+            "expr": "rate(temporal_workflow_completed_total[5m]) / (rate(temporal_workflow_completed_total[5m]) + rate(temporal_workflow_failed_total[5m])) * 100",
+            "legendFormat": "Success Rate %",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [{"format": "percent", "min": 0, "max": 100}]
+      },
+      {
+        "id": 2,
+        "title": "Worker Status",
+        "type": "stat",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+        "targets": [
+          {
+            "expr": "count(up{job=\"workers\"} == 1) by (worker_type)",
+            "legendFormat": "{{ worker_type }}",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 3,
+        "title": "Queue Latency",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8},
+        "targets": [
+          {
+            "expr": "temporal_workflow_task_schedule_to_start_latency_seconds{quantile=\"0.95\"}",
+            "legendFormat": "{{ task_queue }} - p95",
+            "refId": "A"
+          }
+        ],
+        "yaxes": [{"format": "s"}]
+      },
+      {
+        "id": 4,
+        "title": "Document Processing Rate",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8},
+        "targets": [
+          {
+            "expr": "rate(document_processed_total[5m]) * 60",
+            "legendFormat": "Documents/min",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(document_rejected_total[5m]) * 60",
+            "legendFormat": "Rejected/min",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "id": 5,
+        "title": "AI Service Latency",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16},
+        "targets": [
+          {
+            "expr": "histogram_quantile(0.95, rate(ai_service_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "p95 Latency",
+            "refId": "A"
+          },
+          {
+            "expr": "histogram_quantile(0.50, rate(ai_service_request_duration_seconds_bucket[5m]))",
+            "legendFormat": "p50 Latency",
+            "refId": "B"
+          }
+        ],
+        "yaxes": [{"format": "s"}]
+      },
+      {
+        "id": 6,
+        "title": "Resource Usage by Worker Type",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16},
+        "targets": [
+          {
+            "expr": "avg(container_memory_usage_bytes{pod=~\".*worker.*\"}) by (worker_type) / 1024 / 1024 / 1024",
+            "legendFormat": "{{ worker_type }} - Memory (GB)",
+            "refId": "A"
+          },
+          {
+            "expr": "avg(rate(container_cpu_usage_seconds_total{pod=~\".*worker.*\"}[5m])) by (worker_type) * 100",
+            "legendFormat": "{{ worker_type }} - CPU %",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "id": 7,
+        "title": "Database Performance",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 24},
+        "targets": [
+          {
+            "expr": "neo4j_bolt_connections_opened",
+            "legendFormat": "Neo4j Connections",
+            "refId": "A"
+          },
+          {
+            "expr": "weaviate_objects_total",
+            "legendFormat": "Weaviate Objects",
+            "refId": "B"
+          }
+        ]
+      },
+      {
+        "id": 8,
+        "title": "Error Rate by Component",
+        "type": "graph",
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 24},
+        "targets": [
+          {
+            "expr": "rate(temporal_activity_execution_failed_total[5m])",
+            "legendFormat": "Activity Failures",
+            "refId": "A"
+          },
+          {
+            "expr": "rate(ai_service_errors_total[5m])",
+            "legendFormat": "AI Service Errors",
+            "refId": "B"
+          },
+          {
+            "expr": "rate(database_errors_total[5m])",
+            "legendFormat": "Database Errors",
+            "refId": "C"
+          }
+        ]
+      },
+      {
+        "id": 9,
+        "title": "Document Relevance Score Distribution",
+        "type": "histogram",
+        "gridPos": {"h": 8, "w": 24, "x": 0, "y": 32},
+        "targets": [
+          {
+            "expr": "document_relevance_score_bucket",
+            "legendFormat": "Score Distribution",
+            "refId": "A"
+          }
+        ]
+      },
+      {
+        "id": 10,
+        "title": "System Overview",
+        "type": "stat",
+        "gridPos": {"h": 4, "w": 24, "x": 0, "y": 40},
+        "targets": [
+          {
+            "expr": "sum(rate(document_processed_total[24h]))",
+            "legendFormat": "Documents (24h)",
+            "refId": "A"
+          },
+          {
+            "expr": "avg(temporal_workflow_task_execution_duration_seconds)",
+            "legendFormat": "Avg Workflow Duration",
+            "refId": "B"
+          },
+          {
+            "expr": "count(up{job=\"workers\"})",
+            "legendFormat": "Active Workers",
+            "refId": "C"
+          },
+          {
+            "expr": "sum(temporal_workflow_task_slots_available)",
+            "legendFormat": "Available Task Slots",
+            "refId": "D"
+          }
+        ]
+      }
+    ],
+    "refresh": "10s",
+    "time": {
+      "from": "now-1h",
+      "to": "now"
+    }
+  }
+}

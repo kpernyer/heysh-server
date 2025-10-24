@@ -1,0 +1,126 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: temporal-worker
+  namespace: hey-sh
+  labels:
+    app: temporal-worker
+    component: worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: temporal-worker
+  template:
+    metadata:
+      labels:
+        app: temporal-worker
+        component: worker
+    spec:
+      serviceAccountName: temporal-worker
+      containers:
+      - name: worker
+        image: europe-west3-docker.pkg.dev/hey-sh-production/hey-sh-backend/service:latest
+        imagePullPolicy: Always
+        command: ["python", "-m", "worker.main"]
+        env:
+        - name: APP_ENV
+          value: "production"
+        - name: TEMPORAL_ADDRESS
+          valueFrom:
+            secretKeyRef:
+              name: temporal-secrets
+              key: address
+        - name: TEMPORAL_NAMESPACE
+          valueFrom:
+            secretKeyRef:
+              name: temporal-secrets
+              key: namespace
+        - name: TEMPORAL_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: temporal-secrets
+              key: api-key
+        - name: TEMPORAL_TASK_QUEUE
+          valueFrom:
+            secretKeyRef:
+              name: temporal-secrets
+              key: task-queue
+        - name: SUPABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: supabase-secrets
+              key: url
+        - name: SUPABASE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: supabase-secrets
+              key: key
+        - name: NEO4J_URI
+          valueFrom:
+            secretKeyRef:
+              name: neo4j-secrets
+              key: uri
+        - name: NEO4J_USER
+          valueFrom:
+            secretKeyRef:
+              name: neo4j-secrets
+              key: user
+        - name: NEO4J_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: neo4j-secrets
+              key: password
+        - name: WEAVIATE_URL
+          valueFrom:
+            secretKeyRef:
+              name: weaviate-secrets
+              key: url
+        - name: WEAVIATE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: weaviate-secrets
+              key: api-key
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: llm-secrets
+              key: openai-api-key
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: llm-secrets
+              key: anthropic-api-key
+        - name: GOOGLE_CLOUD_PROJECT
+          value: "hey-sh-production"
+        resources:
+          requests:
+            memory: "256Mi"
+            cpu: "100m"
+          limits:
+            memory: "512Mi"
+            cpu: "200m"
+        livenessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import sys; sys.exit(0)"
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          exec:
+            command:
+            - python
+            - -c
+            - "import sys; sys.exit(0)"
+          initialDelaySeconds: 10
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: temporal-worker
+  namespace: hey-sh
+  annotations:
+    iam.gke.io/gcp-service-account: development-hey-sh-backend@hey-sh-production.iam.gserviceaccount.com

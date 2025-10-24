@@ -1,0 +1,119 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: general-worker
+  namespace: temporal-workers
+  labels:
+    app: temporal-worker
+    worker-type: general
+spec:
+  replicas: 5
+  selector:
+    matchLabels:
+      app: temporal-worker
+      worker-type: general
+  template:
+    metadata:
+      labels:
+        app: temporal-worker
+        worker-type: general
+    spec:
+      containers:
+      - name: general-worker
+        image: ${REGISTRY}/hey-sh-worker:${VERSION}
+        imagePullPolicy: Always
+        env:
+        - name: WORKER_TYPES
+          value: "general"
+        - name: TEMPORAL_ADDRESS
+          valueFrom:
+            configMapKeyRef:
+              name: temporal-config
+              key: address
+        - name: TEMPORAL_NAMESPACE
+          valueFrom:
+            configMapKeyRef:
+              name: temporal-config
+              key: namespace
+        - name: SUPABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: supabase-url
+        - name: SUPABASE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: database-credentials
+              key: supabase-key
+        resources:
+          requests:
+            memory: "2Gi"
+            cpu: "500m"
+          limits:
+            memory: "4Gi"
+            cpu: "2"
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 15
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: general-worker
+  namespace: temporal-workers
+spec:
+  selector:
+    app: temporal-worker
+    worker-type: general
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: health
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: general-worker-hpa
+  namespace: temporal-workers
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: general-worker
+  minReplicas: 3
+  maxReplicas: 20
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 50
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 60
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 60
+      policies:
+      - type: Percent
+        value: 100
+        periodSeconds: 60
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      policies:
+      - type: Percent
+        value: 25
+        periodSeconds: 60

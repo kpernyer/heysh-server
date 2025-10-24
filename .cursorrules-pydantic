@@ -1,0 +1,626 @@
+# Cursor Rules for Pydantic Data Validation & Serialization
+
+## Pydantic Model Architecture
+
+### Base Model Patterns
+- Use Pydantic BaseModel for all data structures
+- Implement strict validation with Field constraints
+- Use proper type hints for all fields
+- Implement custom validators for business logic
+- Use Config class for model behavior
+
+```python
+# ✅ Base model pattern
+from pydantic import BaseModel, Field, validator, root_validator
+from typing import Optional, List, Dict, Any, Union
+from datetime import datetime
+from enum import Enum
+import uuid
+
+class BaseEntity(BaseModel):
+    """Base entity with common fields and validation."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Unique identifier")
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
+    updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
+
+    class Config:
+        use_enum_values = True
+        validate_assignment = True
+        extra = "forbid"  # Strict: no extra fields allowed
+        json_encoders = {
+            datetime: lambda v: v.isoformat()
+        }
+```
+
+### Field Validation Patterns
+```python
+# ✅ Field validation with strict constraints
+class WorkflowDefinition(BaseEntity):
+    """Workflow definition with strict validation."""
+
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=100,
+        description="Workflow name",
+        regex=r'^[a-zA-Z0-9\s\-_]+$'  # Only alphanumeric, spaces, hyphens, underscores
+    )
+    description: Optional[str] = Field(
+        None,
+        max_length=500,
+        description="Workflow description"
+    )
+    version: str = Field(
+        ...,
+        regex=r'^\d+\.\d+\.\d+$',
+        description="Semantic version"
+    )
+    status: str = Field(
+        default="pending",
+        description="Workflow status"
+    )
+
+    # Complex fields
+    actors: List['Actor'] = Field(
+        default_factory=list,
+        min_items=1,
+        description="Workflow actors"
+    )
+    activities: List['Activity'] = Field(
+        default_factory=list,
+        min_items=1,
+        description="Workflow activities"
+    )
+
+    # Configuration
+    config: Dict[str, Any] = Field(
+        default_factory=dict,
+        description="Workflow configuration"
+    )
+
+    @validator('name')
+    def validate_name(cls, v):
+        if not v.strip():
+            raise ValueError('Name cannot be empty or whitespace only')
+        return v.strip()
+
+    @validator('description')
+    def validate_description(cls, v):
+        if v is not None and not v.strip():
+            raise ValueError('Description cannot be empty or whitespace only')
+        return v.strip() if v else None
+
+    @validator('actors')
+    def validate_actors(cls, v):
+        if not v:
+            raise ValueError('At least one actor is required')
+
+        # Check for duplicate actor IDs
+        actor_ids = [actor.id for actor in v]
+        if len(actor_ids) != len(set(actor_ids)):
+            raise ValueError('Actor IDs must be unique')
+
+        return v
+
+    @validator('activities')
+    def validate_activities(cls, v):
+        if not v:
+            raise ValueError('At least one activity is required')
+
+        # Check for duplicate activity IDs
+        activity_ids = [activity.id for activity in v]
+        if len(activity_ids) != len(set(activity_ids)):
+            raise ValueError('Activity IDs must be unique')
+
+        return v
+
+    @root_validator
+    def validate_workflow_consistency(cls, values):
+        """Validate workflow consistency across fields."""
+        actors = values.get('actors', [])
+        activities = values.get('activities', [])
+
+        if not actors or not activities:
+            return values
+
+        # Check that all activities reference valid actors
+        actor_ids = {actor.id for actor in actors}
+        for activity in activities:
+            if activity.actor_id not in actor_ids:
+                raise ValueError(f'Activity {activity.id} references invalid actor {activity.actor_id}')
+
+        # Check for circular dependencies in activities
+        activity_deps = {activity.id: activity.depends_on or [] for activity in activities}
+        for activity_id, deps in activity_deps.items():
+            if activity_id in deps:
+                raise ValueError(f'Activity {activity_id} cannot depend on itself')
+
+            # Check for circular dependencies
+            visited = set()
+            def check_circular_deps(current_id, path):
+                if current_id in path:
+                    raise ValueError(f'Circular dependency detected: {" -> ".join(path)} -> {current_id}')
+                if current_id in visited:
+                    return
+                visited.add(current_id)
+                for dep_id in activity_deps.get(current_id, []):
+                    check_circular_deps(dep_id, path + [current_id])
+
+            check_circular_deps(activity_id, [])
+
+        return values
+```
+
+### Enum and Union Types
+```python
+# ✅ Enum patterns
+from enum import Enum
+
+class WorkflowStatus(str, Enum):
+    """Workflow status enumeration."""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+class ActorType(str, Enum):
+    """Actor type enumeration."""
+    AI_AGENT = "ai-agent"
+    HUMAN = "human"
+    EXTERNAL_API = "external-api"
+
+class ActivityType(str, Enum):
+    """Activity type enumeration."""
+    TEMPORAL_ACTIVITY = "temporal-activity"
+    HUMAN_TASK = "human-task"
+    API_CALL = "api-call"
+
+# ✅ Union types with validation
+from typing import Union, Literal
+
+class Actor(BaseEntity):
+    """Actor definition with strict validation."""
+
+    name: str = Field(..., min_length=1, max_length=100, description="Actor name")
+    type: ActorType = Field(..., description="Actor type")
+    config: Dict[str, Any] = Field(default_factory=dict, description="Actor configuration")
+
+    @validator('type')
+    def validate_type(cls, v):
+        if v not in ActorType:
+            raise ValueError(f'Invalid actor type: {v}')
+        return v
+
+    @validator('config')
+    def validate_config(cls, v, values):
+        actor_type = values.get('type')
+        if not actor_type:
+            return v
+
+        # Type-specific config validation
+        if actor_type == ActorType.AI_AGENT:
+            required_keys = ['model', 'capabilities']
+            for key in required_keys:
+                if key not in v:
+                    raise ValueError(f'AI agent config missing required key: {key}')
+        elif actor_type == ActorType.HUMAN:
+            required_keys = ['role']
+            for key in required_keys:
+                if key not in v:
+                    raise ValueError(f'Human actor config missing required key: {key}')
+        elif actor_type == ActorType.EXTERNAL_API:
+            required_keys = ['endpoint', 'method']
+            for key in required_keys:
+                if key not in v:
+                    raise ValueError(f'External API config missing required key: {key}')
+
+        return v
+```
+
+### Complex Validation Patterns
+```python
+# ✅ Complex validation with custom validators
+class Activity(BaseEntity):
+    """Activity definition with complex validation."""
+
+    name: str = Field(..., min_length=1, max_length=100, description="Activity name")
+    actor_id: str = Field(..., description="Associated actor ID")
+    activity_type: ActivityType = Field(..., description="Activity type")
+    function_name: str = Field(..., description="Function name")
+    description: Optional[str] = Field(None, max_length=500, description="Activity description")
+
+    # Input/Output schemas
+    inputs: List['InputSchema'] = Field(default_factory=list, description="Input schema")
+    outputs: List['OutputSchema'] = Field(default_factory=list, description="Output schema")
+
+    # Dependencies and timing
+    depends_on: Optional[List[str]] = Field(None, description="Activity dependencies")
+    timeout: Optional[str] = Field(None, description="Activity timeout")
+    retry_policy: Optional['RetryPolicy'] = Field(None, description="Retry policy")
+
+    @validator('timeout')
+    def validate_timeout(cls, v):
+        if v:
+            import re
+            if not re.match(r'^\d+[smhd]$', v):
+                raise ValueError('Timeout must be in format: number + unit (s/m/h/d)')
+        return v
+
+    @validator('depends_on')
+    def validate_depends_on(cls, v):
+        if v:
+            # Check for self-dependency
+            if hasattr(cls, '_current_activity_id') and cls._current_activity_id in v:
+                raise ValueError('Activity cannot depend on itself')
+        return v
+
+    @root_validator
+    def validate_activity_consistency(cls, values):
+        """Validate activity consistency."""
+        activity_type = values.get('activity_type')
+        inputs = values.get('inputs', [])
+        outputs = values.get('outputs', [])
+
+        # Type-specific validation
+        if activity_type == ActivityType.HUMAN_TASK:
+            if not inputs:
+                raise ValueError('Human tasks must have input schemas')
+        elif activity_type == ActivityType.API_CALL:
+            if not outputs:
+                raise ValueError('API calls must have output schemas')
+
+        return values
+
+class RetryPolicy(BaseModel):
+    """Retry policy with strict validation."""
+
+    max_attempts: int = Field(..., ge=1, le=10, description="Maximum retry attempts")
+    initial_interval: str = Field(default="1s", description="Initial retry interval")
+    backoff_coefficient: float = Field(default=2.0, ge=1.0, le=10.0, description="Backoff coefficient")
+    maximum_interval: str = Field(default="60s", description="Maximum retry interval")
+
+    @validator('initial_interval', 'maximum_interval')
+    def validate_interval(cls, v):
+        import re
+        if not re.match(r'^\d+[smhd]$', v):
+            raise ValueError('Interval must be in format: number + unit (s/m/h/d)')
+        return v
+
+    @validator('backoff_coefficient')
+    def validate_backoff(cls, v):
+        if v <= 1.0:
+            raise ValueError('Backoff coefficient must be greater than 1.0')
+        return v
+```
+
+## Serialization & Deserialization
+
+### JSON Serialization
+```python
+# ✅ JSON serialization with strict validation
+import json
+from typing import Type, TypeVar
+
+T = TypeVar('T', bound=BaseModel)
+
+class PydanticSerializer:
+    """Pydantic serializer with strict validation."""
+
+    @staticmethod
+    def to_json(model: BaseModel, **kwargs) -> str:
+        """Serialize model to JSON with strict validation."""
+        try:
+            return model.json(**kwargs)
+        except Exception as e:
+            raise ValueError(f'Failed to serialize model to JSON: {e}')
+
+    @staticmethod
+    def from_json(json_str: str, model_class: Type[T], **kwargs) -> T:
+        """Deserialize JSON to model with strict validation."""
+        try:
+            return model_class.parse_raw(json_str, **kwargs)
+        except Exception as e:
+            raise ValueError(f'Failed to deserialize JSON to model: {e}')
+
+    @staticmethod
+    def to_dict(model: BaseModel, **kwargs) -> Dict[str, Any]:
+        """Serialize model to dictionary with strict validation."""
+        try:
+            return model.dict(**kwargs)
+        except Exception as e:
+            raise ValueError(f'Failed to serialize model to dict: {e}')
+
+    @staticmethod
+    def from_dict(data: Dict[str, Any], model_class: Type[T], **kwargs) -> T:
+        """Deserialize dictionary to model with strict validation."""
+        try:
+            return model_class(**data, **kwargs)
+        except Exception as e:
+            raise ValueError(f'Failed to deserialize dict to model: {e}')
+
+# ✅ Usage examples
+def save_workflow(workflow: WorkflowDefinition) -> str:
+    """Save workflow to JSON with strict validation."""
+    serializer = PydanticSerializer()
+    return serializer.to_json(workflow, indent=2, ensure_ascii=False)
+
+def load_workflow(json_str: str) -> WorkflowDefinition:
+    """Load workflow from JSON with strict validation."""
+    serializer = PydanticSerializer()
+    return serializer.from_json(json_str, WorkflowDefinition)
+```
+
+### YAML Serialization
+```python
+# ✅ YAML serialization with strict validation
+import yaml
+from typing import Type, TypeVar
+
+class PydanticYAMLSerializer:
+    """Pydantic YAML serializer with strict validation."""
+
+    @staticmethod
+    def to_yaml(model: BaseModel, **kwargs) -> str:
+        """Serialize model to YAML with strict validation."""
+        try:
+            data = model.dict(**kwargs)
+            return yaml.dump(data, default_flow_style=False, indent=2, **kwargs)
+        except Exception as e:
+            raise ValueError(f'Failed to serialize model to YAML: {e}')
+
+    @staticmethod
+    def from_yaml(yaml_str: str, model_class: Type[T], **kwargs) -> T:
+        """Deserialize YAML to model with strict validation."""
+        try:
+            data = yaml.safe_load(yaml_str)
+            return model_class(**data, **kwargs)
+        except yaml.YAMLError as e:
+            raise ValueError(f'Invalid YAML: {e}')
+        except Exception as e:
+            raise ValueError(f'Failed to deserialize YAML to model: {e}')
+
+# ✅ Usage examples
+def save_workflow_yaml(workflow: WorkflowDefinition) -> str:
+    """Save workflow to YAML with strict validation."""
+    serializer = PydanticYAMLSerializer()
+    return serializer.to_yaml(workflow)
+
+def load_workflow_yaml(yaml_str: str) -> WorkflowDefinition:
+    """Load workflow from YAML with strict validation."""
+    serializer = PydanticYAMLSerializer()
+    return serializer.from_yaml(yaml_str, WorkflowDefinition)
+```
+
+## Error Handling & Validation
+
+### Custom Validation Errors
+```python
+# ✅ Custom validation errors
+class ValidationError(Exception):
+    """Custom validation error with detailed information."""
+
+    def __init__(self, message: str, field: str = None, value: Any = None, errors: List[Dict[str, Any]] = None):
+        super().__init__(message)
+        self.field = field
+        self.value = value
+        self.errors = errors or []
+
+class WorkflowValidationError(ValidationError):
+    """Workflow-specific validation error."""
+    pass
+
+class ActorValidationError(ValidationError):
+    """Actor-specific validation error."""
+    pass
+
+class ActivityValidationError(ValidationError):
+    """Activity-specific validation error."""
+    pass
+
+# ✅ Validation error handling
+def validate_workflow_strict(workflow_data: Dict[str, Any]) -> WorkflowDefinition:
+    """Validate workflow with strict error handling."""
+    try:
+        return WorkflowDefinition(**workflow_data)
+    except ValidationError as e:
+        errors = []
+        for error in e.errors():
+            errors.append({
+                'field': '.'.join(str(x) for x in error['loc']),
+                'message': error['msg'],
+                'type': error['type'],
+                'input': error.get('input')
+            })
+
+        raise WorkflowValidationError(
+            f'Workflow validation failed with {len(errors)} errors',
+            errors=errors
+        )
+```
+
+### Data Transformation
+```python
+# ✅ Data transformation with validation
+class DataTransformer:
+    """Data transformer with strict validation."""
+
+    @staticmethod
+    def transform_workflow_to_yaml(workflow: WorkflowDefinition) -> str:
+        """Transform workflow to YAML format with validation."""
+        try:
+            # Validate workflow before transformation
+            if not workflow.actors:
+                raise ValueError('Workflow must have at least one actor')
+            if not workflow.activities:
+                raise ValueError('Workflow must have at least one activity')
+
+            # Transform to YAML format
+            yaml_data = {
+                'version': workflow.version,
+                'workflow': {
+                    'name': workflow.name,
+                    'description': workflow.description,
+                },
+                'actors': [
+                    {
+                        'id': actor.id,
+                        'type': actor.type,
+                        'name': actor.name,
+                        **actor.config
+                    }
+                    for actor in workflow.actors
+                ],
+                'activities': [
+                    {
+                        'id': activity.id,
+                        'actor': activity.actor_id,
+                        'activity_type': activity.activity_type,
+                        'function': activity.function_name,
+                        'description': activity.description,
+                        'inputs': [
+                            {
+                                'name': input_schema.name,
+                                'type': input_schema.type,
+                                'required': input_schema.required,
+                                'description': input_schema.description,
+                                'default': input_schema.default,
+                            }
+                            for input_schema in activity.inputs
+                        ],
+                        'outputs': [
+                            {
+                                'name': output_schema.name,
+                                'type': output_schema.type,
+                                'description': output_schema.description,
+                            }
+                            for output_schema in activity.outputs
+                        ],
+                        'depends_on': activity.depends_on,
+                        'timeout': activity.timeout,
+                        'retry_policy': activity.retry_policy.dict() if activity.retry_policy else None,
+                    }
+                    for activity in workflow.activities
+                ],
+                'workflow_definition': {
+                    'start': workflow.workflow_definition.start,
+                    'steps': [
+                        {
+                            'step': step.step,
+                            'on_success': step.on_success,
+                            'on_failure': step.on_failure,
+                            'conditions': step.conditions,
+                        }
+                        for step in workflow.workflow_definition.steps
+                    ],
+                },
+            }
+
+            return yaml.dump(yaml_data, default_flow_style=False, indent=2)
+        except Exception as e:
+            raise ValueError(f'Failed to transform workflow to YAML: {e}')
+
+    @staticmethod
+    def transform_yaml_to_workflow(yaml_str: str) -> WorkflowDefinition:
+        """Transform YAML to workflow with validation."""
+        try:
+            yaml_data = yaml.safe_load(yaml_str)
+
+            # Validate YAML structure
+            required_keys = ['version', 'workflow', 'actors', 'activities', 'workflow_definition']
+            for key in required_keys:
+                if key not in yaml_data:
+                    raise ValueError(f'YAML missing required key: {key}')
+
+            # Transform to workflow format
+            workflow_data = {
+                'id': str(uuid.uuid4()),
+                'name': yaml_data['workflow']['name'],
+                'description': yaml_data['workflow'].get('description'),
+                'version': yaml_data['version'],
+                'actors': [
+                    {
+                        'id': actor['id'],
+                        'name': actor['name'],
+                        'type': actor['type'],
+                        'config': {k: v for k, v in actor.items() if k not in ['id', 'name', 'type']}
+                    }
+                    for actor in yaml_data['actors']
+                ],
+                'activities': [
+                    {
+                        'id': activity['id'],
+                        'name': activity['id'].replace('-', ' ').title(),
+                        'actor_id': activity['actor'],
+                        'activity_type': activity['activity_type'],
+                        'function_name': activity['function'],
+                        'description': activity.get('description'),
+                        'inputs': [
+                            {
+                                'name': input_data['name'],
+                                'type': input_data['type'],
+                                'required': input_data['required'],
+                                'description': input_data.get('description'),
+                                'default': input_data.get('default'),
+                            }
+                            for input_data in activity.get('inputs', [])
+                        ],
+                        'outputs': [
+                            {
+                                'name': output_data['name'],
+                                'type': output_data['type'],
+                                'description': output_data.get('description'),
+                            }
+                            for output_data in activity.get('outputs', [])
+                        ],
+                        'depends_on': activity.get('depends_on'),
+                        'timeout': activity.get('timeout'),
+                        'retry_policy': RetryPolicy(**activity['retry_policy']) if activity.get('retry_policy') else None,
+                    }
+                    for activity in yaml_data['activities']
+                ],
+                'workflow_definition': {
+                    'start': yaml_data['workflow_definition']['start'],
+                    'steps': [
+                        {
+                            'step': step['step'],
+                            'on_success': step.get('on_success'),
+                            'on_failure': step.get('on_failure'),
+                            'conditions': step.get('conditions'),
+                        }
+                        for step in yaml_data['workflow_definition']['steps']
+                    ],
+                },
+            }
+
+            return WorkflowDefinition(**workflow_data)
+        except Exception as e:
+            raise ValueError(f'Failed to transform YAML to workflow: {e}')
+```
+
+## Best Practices Summary
+
+### Model Design
+- Use strict validation with Field constraints
+- Implement custom validators for business logic
+- Use enums for fixed value sets
+- Implement proper error handling
+
+### Serialization
+- Use Pydantic's built-in serialization methods
+- Implement custom serializers for complex transformations
+- Validate data before and after serialization
+- Handle serialization errors gracefully
+
+### Error Handling
+- Use custom exception types for different validation errors
+- Provide detailed error messages with field information
+- Implement proper error recovery strategies
+- Log all validation errors for debugging
+
+### Type Safety
+- Use strict typing for all model fields
+- Implement proper type validation
+- Use generic types for reusable patterns
+- Avoid any type usage

@@ -1,0 +1,523 @@
+# Cursor Rules for Python Testing - AMAA Pattern
+
+## Test Structure & Organization
+
+### AMAA Pattern (Arrange, Mock, Act, Assert)
+Every test method must follow this exact structure:
+
+```python
+def test_feature_behavior(self):
+    """Test description following Given-When-Then pattern."""
+    # ARRANGE: Set up test data, mocks, and preconditions
+    # MOCK: Configure mocks and external dependencies
+    # ACT: Execute the code under test
+    # ASSERT: Verify the results and side effects
+```
+
+### Test Method Structure
+```python
+@pytest.mark.asyncio
+async def test_workflow_auto_approves_high_score_document(self, temporal_client, test_worker):
+    """Test that documents with high relevance scores are auto-approved."""
+
+    # ARRANGE: Set up test data and preconditions
+    workflow_input = DocumentContributionInput(
+        document_id=str(uuid.uuid4()),
+        document_path="/test/document.pdf",
+        contributor_id="contributor-123",
+        domain_id="domain-456",
+        domain_criteria={"topic": "AI", "quality": "high"},
+        relevance_threshold=7.0,
+        auto_approve_threshold=8.5,
+        use_ai_controller=False,
+    )
+
+    # MOCK: Configure external dependencies (if needed)
+    # (In this case, using environment variables to control mock AI behavior)
+    import os
+    os.environ["DEFAULT_RELEVANCE_SCORE"] = "9.0"
+
+    # ACT: Execute the workflow
+    handle = await temporal_client.start_workflow(
+        DocumentContributionWorkflow.run,
+        workflow_input,
+        id=f"test-workflow-{uuid.uuid4()}",
+        task_queue="test-queue",
+    )
+    result: DocumentProcessingResult = await handle.result()
+
+    # ASSERT: Verify the results
+    assert result.success is True
+    assert result.status == DocumentStatus.INDEXED
+    assert result.relevance_score >= 8.5
+    assert result.knowledge_base_url is not None
+```
+
+## Test Class Organization
+
+### Test Class Structure
+```python
+class TestFeatureName:
+    """Test cases for [Feature Description]."""
+
+    @pytest.mark.asyncio
+    async def test_happy_path_scenario(self, fixture1, fixture2):
+        """Test the main success scenario."""
+        # ARRANGE
+        # MOCK
+        # ACT
+        # ASSERT
+
+    @pytest.mark.asyncio
+    async def test_error_handling_scenario(self, fixture1, fixture2):
+        """Test error handling and edge cases."""
+        # ARRANGE
+        # MOCK
+        # ACT
+        # ASSERT
+```
+
+### Test Naming Conventions
+- Test classes: `TestFeatureName` (PascalCase)
+- Test methods: `test_behavior_description` (snake_case)
+- Test descriptions: Use Given-When-Then format
+- Focus on behavior, not implementation details
+
+## Fixtures & Test Setup
+
+### Pytest Fixtures
+```python
+@pytest.fixture
+async def temporal_client():
+    """Create Temporal client for testing."""
+    client = await Client.connect("localhost:7233", namespace="default")
+    yield client
+    # Cleanup if needed
+
+@pytest.fixture
+async def test_worker(temporal_client):
+    """Create a test worker with required activities."""
+    from activity.document_contribution_activities import (
+        assess_document_relevance,
+        notify_stakeholders,
+        get_next_controller,
+    )
+
+    worker = Worker(
+        temporal_client,
+        task_queue="test-queue",
+        workflows=[DocumentContributionWorkflow],
+        activities=[
+            assess_document_relevance,
+            notify_stakeholders,
+            get_next_controller,
+        ],
+    )
+
+    async with worker:
+        yield worker
+```
+
+### Test Configuration
+```python
+@dataclass
+class TestConfig:
+    """Test configuration for consistent test setup."""
+
+    temporal_address: str = "localhost:7233"
+    namespace: str = "default"
+    task_queue: str = "test-queue"
+    use_mock_ai: bool = True
+```
+
+## Mocking Patterns
+
+### External Dependencies Mocking
+```python
+# Mock external services
+@pytest.fixture
+def mock_ai_service():
+    """Mock AI service responses."""
+    with patch('src.app.clients.ai.AIClient') as mock:
+        mock.assess_relevance.return_value = {"score": 8.5, "reasoning": "High quality"}
+        yield mock
+
+# Mock database operations
+@pytest.fixture
+def mock_database():
+    """Mock database operations."""
+    with patch('src.app.clients.supabase.get_supabase_client') as mock:
+        mock_client = MagicMock()
+        mock_client.table.return_value.select.return_value.eq.return_value.single.return_value.execute.return_value.data = {"id": "test-id"}
+        mock.return_value = mock_client
+        yield mock_client
+```
+
+### Environment Variable Mocking
+```python
+def test_with_mock_environment():
+    """Test using environment variables for mock behavior."""
+    # ARRANGE
+    import os
+    original_value = os.environ.get("DEFAULT_RELEVANCE_SCORE")
+
+    # MOCK
+    os.environ["DEFAULT_RELEVANCE_SCORE"] = "9.0"
+
+    try:
+        # ACT & ASSERT
+        # ... test implementation
+    finally:
+        # Cleanup
+        if original_value is not None:
+            os.environ["DEFAULT_RELEVANCE_SCORE"] = original_value
+        else:
+            os.environ.pop("DEFAULT_RELEVANCE_SCORE", None)
+```
+
+## Test Data Management
+
+### Test Data Factories
+```python
+def create_test_workflow_input(**overrides) -> DocumentContributionInput:
+    """Factory for creating test workflow inputs."""
+    defaults = {
+        "document_id": str(uuid.uuid4()),
+        "document_path": "/test/document.pdf",
+        "contributor_id": "contributor-123",
+        "domain_id": "domain-456",
+        "domain_criteria": {"topic": "AI", "quality": "high"},
+        "relevance_threshold": 7.0,
+        "auto_approve_threshold": 8.5,
+        "use_ai_controller": False,
+    }
+    defaults.update(overrides)
+    return DocumentContributionInput(**defaults)
+
+# Usage in tests:
+def test_scenario():
+    # ARRANGE
+    workflow_input = create_test_workflow_input(
+        relevance_threshold=5.0,
+        use_ai_controller=True
+    )
+```
+
+### Test Data Cleanup
+```python
+@pytest.fixture(autouse=True)
+def cleanup_test_data():
+    """Automatically clean up test data after each test."""
+    yield
+    # Cleanup logic here
+    # Remove test documents, reset database state, etc.
+```
+
+## Async Testing Patterns
+
+### Async Test Structure
+```python
+@pytest.mark.asyncio
+async def test_async_workflow_execution(self, temporal_client, test_worker):
+    """Test async workflow execution."""
+
+    # ARRANGE
+    workflow_input = create_test_workflow_input()
+
+    # MOCK
+    # Configure mocks for async operations
+
+    # ACT
+    handle = await temporal_client.start_workflow(
+        DocumentContributionWorkflow.run,
+        workflow_input,
+        id=f"test-workflow-{uuid.uuid4()}",
+        task_queue="test-queue",
+    )
+
+    # Wait for workflow to reach specific state
+    await asyncio.sleep(2)
+
+    # Send signals if needed
+    await handle.signal(
+        DocumentContributionWorkflow.submit_review,
+        {"approved": True, "feedback": "Test approval"}
+    )
+
+    # Wait for completion
+    result = await handle.result()
+
+    # ASSERT
+    assert result.success is True
+    assert result.status == DocumentStatus.INDEXED
+```
+
+### Concurrent Testing
+```python
+@pytest.mark.asyncio
+async def test_concurrent_workflow_execution(self, temporal_client, test_worker):
+    """Test multiple workflows running concurrently."""
+
+    # ARRANGE
+    workflow_inputs = [
+        create_test_workflow_input(document_id=f"doc-{i}")
+        for i in range(5)
+    ]
+
+    # ACT
+    tasks = []
+    for i, input_data in enumerate(workflow_inputs):
+        task = temporal_client.start_workflow(
+            DocumentContributionWorkflow.run,
+            input_data,
+            id=f"concurrent-test-{i}",
+            task_queue="test-queue",
+        )
+        tasks.append(task)
+
+    results = await asyncio.gather(*tasks)
+
+    # ASSERT
+    assert len(results) == 5
+    for result in results:
+        assert result.success is True
+```
+
+## Integration Testing
+
+### End-to-End Test Structure
+```python
+@pytest.mark.asyncio
+async def test_end_to_end_document_flow():
+    """End-to-end test of complete document processing flow."""
+
+    # ARRANGE: Set up complete test environment
+    client = await Client.connect("localhost:7233")
+    document_id = str(uuid.uuid4())
+
+    # ACT: Execute complete workflow
+    handle = await client.start_workflow(
+        DocumentContributionWorkflow.run,
+        DocumentContributionInput(
+            document_id=document_id,
+            document_path=f"/documents/{document_id}.pdf",
+            contributor_id="test-contributor",
+            domain_id="test-domain",
+            domain_criteria={"topic": "testing"},
+        ),
+        id=f"e2e-test-{document_id}",
+        task_queue="general-queue",
+    )
+
+    result = await handle.result()
+
+    # ASSERT: Verify complete flow
+    assert result.success is True
+
+    # Verify side effects
+    # Check Weaviate indexing
+    # Check Neo4j graph updates
+    # Check notifications sent
+    # Check database state
+```
+
+## Load Testing Patterns
+
+### Load Test Structure
+```python
+class TestLoadPerformance:
+    """Load testing for system performance."""
+
+    @pytest.mark.asyncio
+    async def test_concurrent_workflow_execution(self, temporal_client):
+        """Test system under concurrent load."""
+
+        # ARRANGE: Set up load test parameters
+        num_workflows = 50
+        concurrent_limit = 10
+
+        # ACT: Execute concurrent workflows
+        semaphore = asyncio.Semaphore(concurrent_limit)
+
+        async def run_workflow(index):
+            async with semaphore:
+                workflow_input = create_test_workflow_input(
+                    document_id=f"load-test-{index}"
+                )
+
+                start_time = time.time()
+                handle = await temporal_client.start_workflow(
+                    DocumentContributionWorkflow.run,
+                    workflow_input,
+                    id=f"load-test-{index}",
+                    task_queue="test-queue",
+                )
+                result = await handle.result()
+                duration = time.time() - start_time
+
+                return {
+                    "success": result.success,
+                    "duration": duration,
+                    "workflow_id": f"load-test-{index}"
+                }
+
+        tasks = [run_workflow(i) for i in range(num_workflows)]
+        results = await asyncio.gather(*tasks)
+
+        # ASSERT: Verify performance metrics
+        successful_results = [r for r in results if r["success"]]
+        assert len(successful_results) >= num_workflows * 0.95  # 95% success rate
+
+        avg_duration = sum(r["duration"] for r in successful_results) / len(successful_results)
+        assert avg_duration < 30.0  # Average duration under 30 seconds
+```
+
+## Error Testing
+
+### Error Scenario Testing
+```python
+@pytest.mark.asyncio
+async def test_workflow_error_handling(self, temporal_client, test_worker):
+    """Test workflow error handling and recovery."""
+
+    # ARRANGE: Set up error condition
+    workflow_input = DocumentContributionInput(
+        document_id=str(uuid.uuid4()),
+        document_path="/test/error.pdf",
+        contributor_id="contributor-123",
+        domain_id="",  # Invalid domain_id to trigger error
+        domain_criteria={},
+    )
+
+    # MOCK: Configure error conditions
+    # (Environment variables or mock configurations)
+
+    # ACT: Execute workflow that should fail
+    handle = await temporal_client.start_workflow(
+        DocumentContributionWorkflow.run,
+        workflow_input,
+        id=f"error-test-{uuid.uuid4()}",
+        task_queue="test-queue",
+    )
+
+    result = await handle.result()
+
+    # ASSERT: Verify error handling
+    assert result.success is False
+    assert result.error is not None
+    assert "domain_id" in result.error.lower()  # Verify specific error
+```
+
+## Test Utilities
+
+### Test Helpers
+```python
+class TestHelpers:
+    """Utility functions for testing."""
+
+    @staticmethod
+    async def wait_for_workflow_state(handle, expected_state, timeout=30):
+        """Wait for workflow to reach expected state."""
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            status = await handle.query(DocumentContributionWorkflow.get_status)
+            if status["status"] == expected_state:
+                return True
+            await asyncio.sleep(0.5)
+        return False
+
+    @staticmethod
+    def create_mock_ai_response(score: float, reasoning: str = "Test reasoning"):
+        """Create mock AI response for testing."""
+        return {
+            "score": score,
+            "reasoning": reasoning,
+            "confidence": 0.95
+        }
+```
+
+## Test Documentation
+
+### Test Documentation Standards
+```python
+def test_complex_workflow_scenario(self, temporal_client, test_worker):
+    """
+    Test complex workflow scenario with multiple decision points.
+
+    Given: A document with medium relevance score
+    When: The workflow processes the document through AI controller
+    Then: The document should be approved with proper reasoning
+
+    This test verifies:
+    - AI controller decision making
+    - Workflow state transitions
+    - Result data structure
+    - Error handling for edge cases
+    """
+    # Test implementation
+```
+
+## Test Configuration
+
+### Pytest Configuration
+```python
+# In pyproject.toml or pytest.ini
+[tool.pytest.ini_options]
+testpaths = ["test"]
+asyncio_mode = "auto"
+addopts = "-v --cov=. --cov-report=term-missing --cov-report=html"
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests",
+    "load: marks tests as load tests",
+]
+```
+
+### Test Environment Setup
+```python
+# test/conftest.py
+import pytest
+import asyncio
+from temporalio.client import Client
+
+@pytest.fixture(scope="session")
+def event_loop():
+    """Create an instance of the default event loop for the test session."""
+    loop = asyncio.get_event_loop_policy().new_event_loop()
+    yield loop
+    loop.close()
+
+@pytest.fixture(scope="session")
+async def test_environment():
+    """Set up test environment for the entire test session."""
+    # Start test infrastructure
+    # Set up test databases
+    # Configure test services
+    yield
+    # Cleanup test environment
+```
+
+## Best Practices
+
+### Test Quality Guidelines
+1. **One assertion per test**: Each test should verify one specific behavior
+2. **Descriptive test names**: Test names should clearly describe what is being tested
+3. **Independent tests**: Tests should not depend on each other
+4. **Fast execution**: Unit tests should run quickly (< 1 second each)
+5. **Deterministic**: Tests should produce the same results every time
+6. **Clear setup**: Test setup should be obvious and minimal
+7. **Proper cleanup**: Tests should clean up after themselves
+
+### Test Coverage
+- Aim for >90% code coverage
+- Focus on critical business logic
+- Test error paths and edge cases
+- Include integration tests for external dependencies
+- Use property-based testing for complex algorithms
+
+### Test Maintenance
+- Keep tests simple and focused
+- Refactor tests when code changes
+- Remove obsolete tests
+- Update tests when requirements change
+- Use test data builders for complex objects

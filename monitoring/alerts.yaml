@@ -1,0 +1,163 @@
+groups:
+  - name: workflow_alerts
+    interval: 30s
+    rules:
+      # Worker health alerts
+      - alert: WorkerDown
+        expr: up{job="workers"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          component: worker
+        annotations:
+          summary: "Worker {{ $labels.worker_type }} in pod {{ $labels.pod }} is down"
+          description: "Worker has been down for more than 2 minutes"
+
+      - alert: HighWorkerMemoryUsage
+        expr: container_memory_usage_bytes{pod=~".*worker.*"} / container_spec_memory_limit_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+          component: worker
+        annotations:
+          summary: "High memory usage in worker {{ $labels.pod }}"
+          description: "Memory usage is above 90% for more than 5 minutes"
+
+      - alert: HighWorkerCPUUsage
+        expr: rate(container_cpu_usage_seconds_total{pod=~".*worker.*"}[5m]) > 0.8
+        for: 10m
+        labels:
+          severity: warning
+          component: worker
+        annotations:
+          summary: "High CPU usage in worker {{ $labels.pod }}"
+          description: "CPU usage is above 80% for more than 10 minutes"
+
+      # Workflow performance alerts
+      - alert: WorkflowExecutionSlow
+        expr: histogram_quantile(0.95, rate(temporal_workflow_task_execution_duration_seconds_bucket[5m])) > 30
+        for: 5m
+        labels:
+          severity: warning
+          component: temporal
+        annotations:
+          summary: "Workflow execution is slow"
+          description: "95th percentile workflow execution time is above 30 seconds"
+
+      - alert: HighWorkflowFailureRate
+        expr: rate(temporal_workflow_failed_total[5m]) / rate(temporal_workflow_completed_total[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: critical
+          component: temporal
+        annotations:
+          summary: "High workflow failure rate"
+          description: "More than 10% of workflows are failing"
+
+      - alert: ActivityTimeouts
+        expr: rate(temporal_activity_execution_failed_total{failure_reason="timeout"}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: temporal
+        annotations:
+          summary: "High rate of activity timeouts"
+          description: "Activity timeout rate is above 5%"
+
+      # Queue alerts
+      - alert: AIQueueBacklog
+        expr: temporal_workflow_task_schedule_to_start_latency_seconds{task_queue="ai-processing-queue"} > 60
+        for: 5m
+        labels:
+          severity: warning
+          component: queue
+          queue: ai-processing
+        annotations:
+          summary: "AI processing queue has high latency"
+          description: "Tasks are waiting more than 60 seconds in AI queue"
+
+      - alert: StorageQueueBacklog
+        expr: temporal_workflow_task_schedule_to_start_latency_seconds{task_queue="storage-queue"} > 30
+        for: 5m
+        labels:
+          severity: warning
+          component: queue
+          queue: storage
+        annotations:
+          summary: "Storage queue has high latency"
+          description: "Tasks are waiting more than 30 seconds in storage queue"
+
+      # Database alerts
+      - alert: Neo4jDown
+        expr: up{job="neo4j"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: database
+          database: neo4j
+        annotations:
+          summary: "Neo4j database is down"
+          description: "Neo4j has been unreachable for more than 1 minute"
+
+      - alert: WeaviateDown
+        expr: up{job="weaviate"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: database
+          database: weaviate
+        annotations:
+          summary: "Weaviate database is down"
+          description: "Weaviate has been unreachable for more than 1 minute"
+
+      - alert: DatabaseConnectionPoolExhausted
+        expr: database_connection_pool_size - database_connection_pool_available < 5
+        for: 2m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Database connection pool nearly exhausted"
+          description: "Less than 5 connections available in pool"
+
+      # AI Service alerts
+      - alert: AIServiceHighLatency
+        expr: histogram_quantile(0.95, rate(ai_service_request_duration_seconds_bucket[5m])) > 10
+        for: 5m
+        labels:
+          severity: warning
+          component: ai-service
+        annotations:
+          summary: "AI service has high latency"
+          description: "95th percentile AI service latency is above 10 seconds"
+
+      - alert: AIServiceErrorRate
+        expr: rate(ai_service_errors_total[5m]) / rate(ai_service_requests_total[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: ai-service
+        annotations:
+          summary: "High AI service error rate"
+          description: "AI service error rate is above 5%"
+
+      # Document processing alerts
+      - alert: DocumentRejectionRate
+        expr: rate(document_rejected_total[1h]) / rate(document_processed_total[1h]) > 0.3
+        for: 5m
+        labels:
+          severity: info
+          component: business
+        annotations:
+          summary: "High document rejection rate"
+          description: "More than 30% of documents are being rejected"
+
+      - alert: DocumentProcessingStalled
+        expr: rate(document_processed_total[10m]) == 0 AND up{job="workers"} == 1
+        for: 10m
+        labels:
+          severity: warning
+          component: business
+        annotations:
+          summary: "No documents processed in 10 minutes"
+          description: "Document processing appears to be stalled despite workers being up"

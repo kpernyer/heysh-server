@@ -1,0 +1,790 @@
+# Cursor Rules for Frontend Architecture
+
+## Project Structure & Organization
+
+### Directory Structure
+```
+src/
+├── components/          # Reusable UI components
+│   ├── ui/             # Base UI components (shadcn/ui)
+│   ├── forms/          # Form components
+│   ├── workflow/       # Workflow-specific components
+│   └── layout/         # Layout components
+├── pages/              # Page components (route components)
+├── hooks/              # Custom React hooks
+├── lib/                # Utility functions and configurations
+├── types/              # TypeScript type definitions
+├── integrations/      # External service integrations
+├── contexts/           # React contexts
+└── assets/             # Static assets
+```
+
+### Component Organization
+- Group components by feature/domain
+- Use barrel exports (`index.ts`) for clean imports
+- Keep components focused and single-purpose
+- Use consistent naming conventions
+
+```typescript
+// ✅ Component organization
+// components/workflow/index.ts
+export { WorkflowBuilder } from './WorkflowBuilder';
+export { WorkflowList } from './WorkflowList';
+export { WorkflowCard } from './WorkflowCard';
+export { WorkflowEditor } from './WorkflowEditor';
+
+// components/workflow/WorkflowBuilder.tsx
+export function WorkflowBuilder({ ... }: WorkflowBuilderProps) {
+  // Implementation
+}
+```
+
+## API Integration Architecture
+
+### API Client Pattern
+- Create typed API functions with proper error handling
+- Use consistent error handling across all API calls
+- Implement proper authentication headers
+- Use environment variables for API URLs
+
+```typescript
+// ✅ API client pattern
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8001';
+
+async function getAuthHeaders(): Promise<HeadersInit> {
+  const { data: { session } } = await supabase.auth.getSession();
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+  };
+
+  if (session?.access_token) {
+    headers['Authorization'] = `Bearer ${session.access_token}`;
+  }
+
+  return headers;
+}
+
+export async function uploadDocument(
+  documentId: string,
+  domainId: string,
+  filePath: string,
+  fileName: string
+): Promise<WorkflowResponse> {
+  const headers = await getAuthHeaders();
+
+  try {
+    const response = await fetch(`${API_URL}/api/v1/documents`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        document_id: documentId,
+        domain_id: domainId,
+        file_path: filePath,
+        name: fileName,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to upload document: ${response.statusText}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error('Upload error:', error);
+    throw error;
+  }
+}
+```
+
+### API Response Types
+```typescript
+// ✅ API response types
+export interface WorkflowResponse {
+  workflow_id: string;
+  status: string;
+  message: string;
+}
+
+export interface WorkflowStatus {
+  workflow_id: string;
+  status: string;
+  type: string;
+}
+
+export interface ApiError {
+  message: string;
+  status: number;
+  code?: string;
+}
+
+// ✅ Error handling utility
+const handleApiError = (error: unknown): ApiError => {
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      status: 500,
+    };
+  }
+  return {
+    message: 'Unknown error occurred',
+    status: 500,
+  };
+};
+```
+
+### GraphQL Integration
+```typescript
+// ✅ GraphQL client
+export interface GraphQLResponse<T> {
+  data?: T;
+  errors?: Array<{
+    message: string;
+    locations?: Array<{ line: number; column: number }>;
+    path?: Array<string | number>;
+  }>;
+}
+
+export async function graphql<T = any>(
+  query: string,
+  variables?: Record<string, any>
+): Promise<GraphQLResponse<T>> {
+  const headers = await getAuthHeaders();
+  const response = await fetch(`${API_URL}/graphql`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify({
+      query,
+      variables,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`GraphQL request failed: ${response.statusText}`);
+  }
+
+  return response.json();
+}
+```
+
+## Routing & Navigation
+
+### React Router Patterns
+- Use React Router for client-side routing
+- Implement protected routes with authentication
+- Use proper TypeScript for route parameters
+- Handle route transitions gracefully
+
+```typescript
+// ✅ Routing patterns
+export function App() {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <Routes>
+          <Route path="/" element={<Welcome />} />
+          <Route path="/auth" element={<Auth />} />
+          <Route path="/workflows" element={
+            <ProtectedRoute>
+              <MyWorkflowsPage />
+            </ProtectedRoute>
+          } />
+          <Route path="/workflows/:id/edit" element={
+            <ProtectedRoute>
+              <WorkflowBuilder />
+            </ProtectedRoute>
+          } />
+          <Route path="/domains" element={
+            <ProtectedRoute>
+              <DomainsPage />
+            </ProtectedRoute>
+          } />
+        </Routes>
+      </AuthProvider>
+    </BrowserRouter>
+  );
+}
+
+// ✅ Protected route component
+interface ProtectedRouteProps {
+  children: React.ReactNode;
+}
+
+export function ProtectedRoute({ children }: ProtectedRouteProps) {
+  const { user, loading } = useAuth();
+
+  if (loading) {
+    return <div>Loading...</div>;
+  }
+
+  if (!user) {
+    return <Navigate to="/auth" replace />;
+  }
+
+  return <>{children}</>;
+}
+```
+
+### Navigation Hooks
+```typescript
+// ✅ Navigation utilities
+export function useNavigation() {
+  const navigate = useNavigate();
+  const location = useLocation();
+
+  const goToWorkflow = useCallback((workflowId: string) => {
+    navigate(`/workflows/${workflowId}/edit`);
+  }, [navigate]);
+
+  const goToWorkflows = useCallback(() => {
+    navigate('/workflows');
+  }, [navigate]);
+
+  const goBack = useCallback(() => {
+    navigate(-1);
+  }, [navigate]);
+
+  return {
+    goToWorkflow,
+    goToWorkflows,
+    goBack,
+    currentPath: location.pathname,
+  };
+}
+```
+
+## State Management Architecture
+
+### Context-Based State Management
+- Use React Context for global state
+- Create separate contexts for different concerns
+- Use custom hooks for context consumption
+- Implement proper error boundaries
+
+```typescript
+// ✅ Context architecture
+// contexts/AuthContext.tsx
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+  // Auth state management
+};
+
+// contexts/WorkflowContext.tsx
+interface WorkflowContextType {
+  currentWorkflow: WorkflowDefinition | null;
+  setCurrentWorkflow: (workflow: WorkflowDefinition | null) => void;
+  workflows: WorkflowDefinition[];
+  setWorkflows: (workflows: WorkflowDefinition[]) => void;
+}
+
+export const WorkflowProvider = ({ children }: { children: React.ReactNode }) => {
+  const [currentWorkflow, setCurrentWorkflow] = useState<WorkflowDefinition | null>(null);
+  const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
+
+  const value = useMemo(() => ({
+    currentWorkflow,
+    setCurrentWorkflow,
+    workflows,
+    setWorkflows,
+  }), [currentWorkflow, workflows]);
+
+  return (
+    <WorkflowContext.Provider value={value}>
+      {children}
+    </WorkflowContext.Provider>
+  );
+};
+```
+
+### Local State Management
+```typescript
+// ✅ Local state patterns
+export function WorkflowBuilder({ initialWorkflow }: WorkflowBuilderProps) {
+  const [workflow, setWorkflow] = useState<WorkflowDefinition>(
+    initialWorkflow || createDefaultWorkflow()
+  );
+  const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
+
+  const handleWorkflowChange = useCallback((newWorkflow: WorkflowDefinition) => {
+    setWorkflow(newWorkflow);
+    setIsDirty(true);
+  }, []);
+
+  const handleSave = useCallback(async () => {
+    try {
+      await saveWorkflow(workflow);
+      setIsDirty(false);
+      toast({ title: "Workflow saved successfully" });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save workflow",
+        variant: "destructive"
+      });
+    }
+  }, [workflow, toast]);
+
+  return (
+    // Component JSX
+  );
+}
+```
+
+## Component Architecture
+
+### Component Composition
+- Use composition over inheritance
+- Create reusable UI components
+- Implement proper prop interfaces
+- Use render props when appropriate
+
+```typescript
+// ✅ Component composition
+interface CardProps {
+  children: React.ReactNode;
+  className?: string;
+  variant?: 'default' | 'outlined' | 'elevated';
+  onClick?: () => void;
+}
+
+export function Card({ children, className, variant = 'default', onClick }: CardProps) {
+  return (
+    <div
+      className={cn(
+        'rounded-lg border bg-card text-card-foreground shadow-sm',
+        {
+          'border-border': variant === 'default',
+          'border-2 border-primary': variant === 'outlined',
+          'shadow-lg': variant === 'elevated',
+        },
+        onClick && 'cursor-pointer hover:shadow-md transition-shadow',
+        className
+      )}
+      onClick={onClick}
+    >
+      {children}
+    </div>
+  );
+}
+
+// ✅ Usage
+<Card variant="elevated" onClick={() => selectWorkflow(workflow.id)}>
+  <CardHeader>
+    <CardTitle>{workflow.name}</CardTitle>
+    <CardDescription>{workflow.description}</CardDescription>
+  </CardHeader>
+  <CardContent>
+    <WorkflowStats workflow={workflow} />
+  </CardContent>
+</Card>
+```
+
+### Layout Components
+```typescript
+// ✅ Layout architecture
+export function AppLayout({ children }: { children: React.ReactNode }) {
+  const { user } = useAuth();
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  return (
+    <div className="min-h-screen bg-background">
+      <Header onMenuClick={() => setSidebarOpen(!sidebarOpen)} />
+
+      <div className="flex">
+        <Sidebar
+          open={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+        />
+
+        <main className="flex-1 p-6">
+          {children}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+// ✅ Page layout
+export function WorkflowPage() {
+  return (
+    <AppLayout>
+      <div className="space-y-6">
+        <PageHeader
+          title="Workflows"
+          description="Manage your workflow definitions"
+        />
+        <WorkflowList />
+      </div>
+    </AppLayout>
+  );
+}
+```
+
+## Form Architecture
+
+### Form Management
+- Use React Hook Form for form state
+- Integrate with Zod for validation
+- Implement proper error handling
+- Use consistent form patterns
+
+```typescript
+// ✅ Form architecture
+const workflowSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  description: z.string().optional(),
+  version: z.string().min(1, "Version is required"),
+  actors: z.array(actorSchema).min(1, "At least one actor is required"),
+  activities: z.array(activitySchema).min(1, "At least one activity is required"),
+});
+
+type WorkflowFormData = z.infer<typeof workflowSchema>;
+
+export function WorkflowForm({ initialData, onSave }: WorkflowFormProps) {
+  const form = useForm<WorkflowFormData>({
+    defaultValues: initialData || createDefaultWorkflow(),
+    resolver: zodResolver(workflowSchema),
+  });
+
+  const onSubmit = useCallback(async (data: WorkflowFormData) => {
+    try {
+      await saveWorkflow(data);
+      onSave(data);
+      toast({ title: "Workflow saved successfully" });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save workflow",
+        variant: "destructive"
+      });
+    }
+  }, [onSave, toast]);
+
+  return (
+    <Form {...form}>
+      <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+        <FormField
+          control={form.control}
+          name="name"
+          render={({ field }) => (
+            <FormItem>
+              <FormLabel>Workflow Name</FormLabel>
+              <FormControl>
+                <Input {...field} />
+              </FormControl>
+              <FormMessage />
+            </FormItem>
+          )}
+        />
+        {/* More form fields */}
+        <Button type="submit" disabled={form.formState.isSubmitting}>
+          {form.formState.isSubmitting ? "Saving..." : "Save"}
+        </Button>
+      </form>
+    </Form>
+  );
+}
+```
+
+## Authentication Architecture
+
+### Auth Provider Pattern
+```typescript
+// ✅ Auth architecture
+interface AuthContextType {
+  user: User | null;
+  session: Session | null;
+  loading: boolean;
+  token: string | null;
+  logout: () => void;
+}
+
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const handleLogout = useCallback(() => {
+    clearAuthData();
+    setUser(null);
+    setSession(null);
+  }, []);
+
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        // Check for JWT token from backend auth
+        const storedToken = getStoredAuthToken();
+        if (storedToken) {
+          setToken(storedToken);
+          setLoading(false);
+          return;
+        }
+
+        // Fall back to Supabase auth
+        const { data: { session } } = await supabase.auth.getSession();
+        setSession(session);
+        setUser(session?.user ?? null);
+      } catch (err) {
+        console.error('Auth initialization error:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initAuth();
+
+    // Set up auth state listener
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event, session) => {
+        setSession(session);
+        setUser(session?.user ?? null);
+        setLoading(false);
+      }
+    );
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const value = useMemo(() => ({
+    user,
+    session,
+    loading,
+    token: null,
+    logout: handleLogout,
+  }), [user, session, loading, handleLogout]);
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+```
+
+## Error Handling Architecture
+
+### Error Boundary Implementation
+```typescript
+// ✅ Error boundary architecture
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error?: Error;
+}
+
+export class ErrorBoundary extends Component<PropsWithChildren, ErrorBoundaryState> {
+  constructor(props: PropsWithChildren) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Error caught by boundary:', error, errorInfo);
+    // Log to error reporting service
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <ErrorFallback error={this.state.error} />;
+    }
+
+    return this.props.children;
+  }
+}
+
+// ✅ Error fallback component
+function ErrorFallback({ error }: { error?: Error }) {
+  return (
+    <div className="flex flex-col items-center justify-center p-8">
+      <h2 className="text-xl font-semibold mb-4">Something went wrong</h2>
+      <p className="text-muted-foreground mb-4">
+        We're sorry, but something unexpected happened.
+      </p>
+      {error && (
+        <details className="mb-4">
+          <summary>Error details</summary>
+          <pre className="text-sm text-muted-foreground mt-2">
+            {error.message}
+          </pre>
+        </details>
+      )}
+      <Button onClick={() => window.location.reload()}>
+        Reload Page
+      </Button>
+    </div>
+  );
+}
+```
+
+## Performance Architecture
+
+### Code Splitting & Lazy Loading
+```typescript
+// ✅ Lazy loading architecture
+const WorkflowBuilder = lazy(() => import('./WorkflowBuilder'));
+const WorkflowList = lazy(() => import('./WorkflowList'));
+const DomainsPage = lazy(() => import('./DomainsPage'));
+
+export function App() {
+  return (
+    <ErrorBoundary>
+      <Suspense fallback={<LoadingSpinner />}>
+        <BrowserRouter>
+          <AuthProvider>
+            <Routes>
+              <Route path="/workflows" element={
+                <ProtectedRoute>
+                  <WorkflowList />
+                </ProtectedRoute>
+              } />
+              <Route path="/workflows/:id/edit" element={
+                <ProtectedRoute>
+                  <WorkflowBuilder />
+                </ProtectedRoute>
+              } />
+              <Route path="/domains" element={
+                <ProtectedRoute>
+                  <DomainsPage />
+                </ProtectedRoute>
+              } />
+            </Routes>
+          </AuthProvider>
+        </BrowserRouter>
+      </Suspense>
+    </ErrorBoundary>
+  );
+}
+```
+
+### Memoization Strategy
+```typescript
+// ✅ Memoization architecture
+const WorkflowCard = memo(({ workflow, onSelect }: WorkflowCardProps) => {
+  const handleSelect = useCallback(() => {
+    onSelect(workflow.id);
+  }, [workflow.id, onSelect]);
+
+  return (
+    <Card onClick={handleSelect}>
+      <CardHeader>
+        <CardTitle>{workflow.name}</CardTitle>
+        <CardDescription>{workflow.description}</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <WorkflowStats workflow={workflow} />
+      </CardContent>
+    </Card>
+  );
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.workflow.id === nextProps.workflow.id &&
+    prevProps.onSelect === nextProps.onSelect
+  );
+});
+
+// ✅ Expensive calculations
+const WorkflowStats = ({ workflow }: { workflow: WorkflowDefinition }) => {
+  const stats = useMemo(() => ({
+    activityCount: workflow.activities.length,
+    actorCount: workflow.actors.length,
+    complexity: calculateComplexity(workflow),
+    estimatedDuration: estimateDuration(workflow),
+  }), [workflow]);
+
+  return (
+    <div className="grid grid-cols-2 gap-4">
+      <div>Activities: {stats.activityCount}</div>
+      <div>Actors: {stats.actorCount}</div>
+      <div>Complexity: {stats.complexity}</div>
+      <div>Duration: {stats.estimatedDuration}</div>
+    </div>
+  );
+};
+```
+
+## Testing Architecture
+
+### Test Organization
+```
+src/
+├── __tests__/           # Test files
+│   ├── components/      # Component tests
+│   ├── hooks/          # Hook tests
+│   ├── pages/          # Page tests
+│   └── utils/          # Utility tests
+├── test-utils/         # Test utilities
+└── mocks/              # Mock data and functions
+```
+
+### Test Utilities
+```typescript
+// ✅ Test utilities
+export const createMockWorkflow = (overrides?: Partial<WorkflowDefinition>): WorkflowDefinition => ({
+  id: 'test-workflow-1',
+  version: '1.0',
+  name: 'Test Workflow',
+  description: 'A test workflow',
+  actors: [],
+  activities: [],
+  workflowDefinition: {
+    start: '',
+    steps: [],
+  },
+  ...overrides,
+});
+
+export const createMockUser = (overrides?: Partial<User>): User => ({
+  id: 'test-user-1',
+  email: 'test@example.com',
+  // ... other required fields
+  ...overrides,
+});
+
+// ✅ Test wrapper
+export function TestWrapper({ children }: { children: React.ReactNode }) {
+  return (
+    <BrowserRouter>
+      <AuthProvider>
+        <WorkflowProvider>
+          {children}
+        </WorkflowProvider>
+      </AuthProvider>
+    </BrowserRouter>
+  );
+}
+```
+
+## Best Practices Summary
+
+### Architecture Principles
+- Use composition over inheritance
+- Keep components focused and single-purpose
+- Implement proper separation of concerns
+- Use consistent patterns across the application
+
+### State Management
+- Use local state for component-specific state
+- Use context for global state
+- Implement proper state updates
+- Avoid prop drilling
+
+### Performance
+- Implement code splitting for large components
+- Use memoization appropriately
+- Optimize re-renders
+- Monitor bundle size
+
+### Error Handling
+- Use error boundaries for component errors
+- Implement proper error states
+- Provide meaningful error messages
+- Log errors for debugging
+
+### Testing
+- Test component behavior, not implementation
+- Use proper mocking for external dependencies
+- Maintain high test coverage
+- Test both happy path and error cases

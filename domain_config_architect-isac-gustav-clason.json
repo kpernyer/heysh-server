@@ -1,0 +1,60 @@
+{
+  "domain_id": "architect-isac-gustav-clason",
+  "title": "Architect Isac Gustav Clason",
+  "description": "Swedish architect and pioneer of National Romanticism",
+  "status": "active",
+  "topics": [
+    "Isac Gustav Clason's biography",
+    "National Romanticism in architecture",
+    "Swedish architectural history",
+    "Key works of Isac Gustav Clason",
+    "Influence of European architectural trends",
+    "Cultural significance of Clason's work",
+    "Preservation of Clason's architectural heritage",
+    "urban development",
+    "material science"
+  ],
+  "quality_criteria": {
+    "min_length": 1500,
+    "quality_threshold": 8.0,
+    "required_sections": [
+      "abstract",
+      "introduction",
+      "conclusion",
+      "references"
+    ],
+    "technical_depth_required": true,
+    "safety_considerations_required": true,
+    "practical_applications_required": true
+  },
+  "search_attributes": {
+    "domain_id": "architect-isac-gustav-clason",
+    "domain_name": "Architect Isac Gustav Clason",
+    "owner_id": "owner-123",
+    "topics": [
+      "Isac Gustav Clason's biography",
+      "National Romanticism in architecture",
+      "Swedish architectural history",
+      "Key works of Isac Gustav Clason",
+      "Influence of European architectural trends",
+      "Cultural significance of Clason's work",
+      "Preservation of Clason's architectural heritage"
+    ],
+    "target_audience": [
+      "architecture students",
+      "historians",
+      "preservation professionals"
+    ]
+  },
+  "bootstrap_prompt": "Explore the architectural legacy of Isac Gustav Clason, focusing on his contributions to National Romanticism and the cultural significance of his works in Swedish history.",
+  "research_steps": [
+    "Conduct a literature review on Isac Gustav Clason and National Romanticism",
+    "Analyze Clason's major architectural works and their historical context",
+    "Investigate the preservation status and cultural impact of Clason's buildings"
+  ],
+  "target_audience": [
+    "architecture students",
+    "historians",
+    "preservation professionals"
+  ]
+}

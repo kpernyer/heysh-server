@@ -1,0 +1,547 @@
+# Cursor Rules for Configuration Management & Data Marshalling
+
+## Configuration Architecture
+
+### External Constants & Configuration
+- Define all text strings and constants in external configuration files
+- Use environment-specific configuration files
+- Implement strict validation for all configuration values
+- Use Pydantic for configuration validation and type safety
+
+```python
+# ✅ Configuration structure
+# config/constants.py
+class Constants:
+    """Application constants and text strings."""
+
+    # API Endpoints
+    API_BASE_URL = "https://api.hey.sh"
+    GRAPHQL_ENDPOINT = "/graphql"
+    HEALTH_CHECK_ENDPOINT = "/health"
+
+    # Workflow Status
+    WORKFLOW_STATUS_PENDING = "pending"
+    WORKFLOW_STATUS_RUNNING = "running"
+    WORKFLOW_STATUS_COMPLETED = "completed"
+    WORKFLOW_STATUS_FAILED = "failed"
+
+    # Error Messages
+    ERROR_INVALID_WORKFLOW = "Invalid workflow definition"
+    ERROR_MISSING_REQUIRED_FIELD = "Missing required field: {field}"
+    ERROR_VALIDATION_FAILED = "Validation failed: {details}"
+
+    # UI Messages
+    SUCCESS_WORKFLOW_SAVED = "Workflow saved successfully"
+    SUCCESS_DOCUMENT_UPLOADED = "Document uploaded successfully"
+    INFO_PROCESSING_WORKFLOW = "Processing workflow..."
+
+# config/settings.py
+from pydantic import BaseSettings, Field, validator
+from typing import Optional, List
+import os
+
+class DatabaseSettings(BaseSettings):
+    """Database configuration with strict validation."""
+
+    url: str = Field(..., description="Database connection URL")
+    pool_size: int = Field(default=10, ge=1, le=100, description="Connection pool size")
+    max_overflow: int = Field(default=20, ge=0, le=200, description="Max overflow connections")
+    echo: bool = Field(default=False, description="Enable SQL echo")
+
+    @validator('url')
+    def validate_url(cls, v):
+        if not v.startswith(('postgresql://', 'sqlite://')):
+            raise ValueError('Database URL must be PostgreSQL or SQLite')
+        return v
+
+    class Config:
+        env_prefix = "DB_"
+        case_sensitive = False
+
+class APISettings(BaseSettings):
+    """API configuration with strict validation."""
+
+    host: str = Field(default="0.0.0.0", description="API host")
+    port: int = Field(default=8000, ge=1, le=65535, description="API port")
+    workers: int = Field(default=1, ge=1, le=32, description="Number of workers")
+    reload: bool = Field(default=False, description="Enable auto-reload")
+
+    # CORS settings
+    cors_origins: List[str] = Field(default=["*"], description="CORS allowed origins")
+    cors_methods: List[str] = Field(default=["GET", "POST", "PUT", "DELETE"], description="CORS allowed methods")
+
+    @validator('cors_origins')
+    def validate_cors_origins(cls, v):
+        if "*" in v and len(v) > 1:
+            raise ValueError('Cannot specify other origins when using "*"')
+        return v
+
+    class Config:
+        env_prefix = "API_"
+        case_sensitive = False
+
+class SecuritySettings(BaseSettings):
+    """Security configuration with strict validation."""
+
+    secret_key: str = Field(..., min_length=32, description="Secret key for JWT")
+    algorithm: str = Field(default="HS256", description="JWT algorithm")
+    access_token_expire_minutes: int = Field(default=30, ge=1, le=1440, description="Token expiration in minutes")
+
+    # Rate limiting
+    rate_limit_requests: int = Field(default=100, ge=1, le=10000, description="Rate limit requests per minute")
+    rate_limit_window: int = Field(default=60, ge=1, le=3600, description="Rate limit window in seconds")
+
+    @validator('secret_key')
+    def validate_secret_key(cls, v):
+        if len(v) < 32:
+            raise ValueError('Secret key must be at least 32 characters')
+        return v
+
+    class Config:
+        env_prefix = "SECURITY_"
+        case_sensitive = False
+
+class Settings(BaseSettings):
+    """Main application settings."""
+
+    # Environment
+    environment: str = Field(default="development", description="Environment name")
+    debug: bool = Field(default=False, description="Debug mode")
+    log_level: str = Field(default="INFO", description="Logging level")
+
+    # Sub-configurations
+    database: DatabaseSettings = DatabaseSettings()
+    api: APISettings = APISettings()
+    security: SecuritySettings = SecuritySettings()
+
+    @validator('environment')
+    def validate_environment(cls, v):
+        allowed = ['development', 'staging', 'production']
+        if v not in allowed:
+            raise ValueError(f'Environment must be one of: {allowed}')
+        return v
+
+    @validator('log_level')
+    def validate_log_level(cls, v):
+        allowed = ['DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL']
+        if v.upper() not in allowed:
+            raise ValueError(f'Log level must be one of: {allowed}')
+        return v.upper()
+
+    class Config:
+        env_file = ".env"
+        env_file_encoding = "utf-8"
+        case_sensitive = False
+        validate_assignment = True
+
+# Global settings instance
+settings = Settings()
+```
+
+## Pydantic Data Models & Validation
+
+### Strict Data Models
+```python
+# ✅ Pydantic models with strict validation
+from pydantic import BaseModel, Field, validator, root_validator
+from typing import Optional, List, Dict, Any, Union
+from datetime import datetime
+from enum import Enum
+import uuid
+
+class WorkflowStatus(str, Enum):
+    """Workflow status enumeration."""
+    PENDING = "pending"
+    RUNNING = "running"
+    COMPLETED = "completed"
+    FAILED = "failed"
+    CANCELLED = "cancelled"
+
+class WorkflowDefinition(BaseModel):
+    """Workflow definition with strict validation."""
+
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Unique workflow ID")
+    name: str = Field(..., min_length=1, max_length=100, description="Workflow name")
+    description: Optional[str] = Field(None, max_length=500, description="Workflow description")
+    version: str = Field(..., regex=r'^\d+\.\d+\.\d+$', description="Semantic version")
+    status: WorkflowStatus = Field(default=WorkflowStatus.PENDING, description="Workflow status")
+
+    # Timestamps
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="Creation timestamp")
+    updated_at: Optional[datetime] = Field(None, description="Last update timestamp")
+
+    # Workflow configuration
+    actors: List['Actor'] = Field(default_factory=list, description="Workflow actors")
+    activities: List['Activity'] = Field(default_factory=list, description="Workflow activities")
+
+    @validator('name')
+    def validate_name(cls, v):
+        if not v.strip():
+            raise ValueError('Name cannot be empty or whitespace only')
+        return v.strip()
+
+    @validator('actors')
+    def validate_actors(cls, v):
+        if not v:
+            raise ValueError('At least one actor is required')
+        return v
+
+    @validator('activities')
+    def validate_activities(cls, v):
+        if not v:
+            raise ValueError('At least one activity is required')
+        return v
+
+    @root_validator
+    def validate_workflow_consistency(cls, values):
+        """Validate workflow consistency."""
+        actors = values.get('actors', [])
+        activities = values.get('activities', [])
+
+        # Check that all activities reference valid actors
+        actor_ids = {actor.id for actor in actors}
+        for activity in activities:
+            if activity.actor_id not in actor_ids:
+                raise ValueError(f'Activity {activity.id} references invalid actor {activity.actor_id}')
+
+        return values
+
+    class Config:
+        use_enum_values = True
+        validate_assignment = True
+        extra = "forbid"  # Strict: no extra fields allowed
+
+class Actor(BaseModel):
+    """Actor definition with strict validation."""
+
+    id: str = Field(..., min_length=1, max_length=50, description="Actor ID")
+    name: str = Field(..., min_length=1, max_length=100, description="Actor name")
+    type: str = Field(..., description="Actor type")
+    config: Dict[str, Any] = Field(default_factory=dict, description="Actor configuration")
+
+    @validator('id')
+    def validate_id(cls, v):
+        if not v.isalnum() and '_' not in v and '-' not in v:
+            raise ValueError('Actor ID must contain only alphanumeric characters, underscores, and hyphens')
+        return v
+
+    class Config:
+        extra = "forbid"
+
+class Activity(BaseModel):
+    """Activity definition with strict validation."""
+
+    id: str = Field(..., min_length=1, max_length=50, description="Activity ID")
+    name: str = Field(..., min_length=1, max_length=100, description="Activity name")
+    actor_id: str = Field(..., description="Associated actor ID")
+    activity_type: str = Field(..., description="Activity type")
+    function_name: str = Field(..., description="Function name")
+    description: Optional[str] = Field(None, max_length=500, description="Activity description")
+
+    # Input/Output schemas
+    inputs: List['InputSchema'] = Field(default_factory=list, description="Input schema")
+    outputs: List['OutputSchema'] = Field(default_factory=list, description="Output schema")
+
+    # Dependencies and timing
+    depends_on: Optional[List[str]] = Field(None, description="Activity dependencies")
+    timeout: Optional[str] = Field(None, regex=r'^\d+[smhd]$', description="Activity timeout")
+
+    @validator('timeout')
+    def validate_timeout(cls, v):
+        if v:
+            # Validate timeout format (e.g., "30s", "5m", "1h", "1d")
+            import re
+            if not re.match(r'^\d+[smhd]$', v):
+                raise ValueError('Timeout must be in format: number + unit (s/m/h/d)')
+        return v
+
+    class Config:
+        extra = "forbid"
+
+class InputSchema(BaseModel):
+    """Input schema definition."""
+
+    name: str = Field(..., min_length=1, max_length=50, description="Input name")
+    type: str = Field(..., description="Input type")
+    required: bool = Field(default=True, description="Whether input is required")
+    description: Optional[str] = Field(None, max_length=200, description="Input description")
+    default: Optional[Any] = Field(None, description="Default value")
+
+    class Config:
+        extra = "forbid"
+
+class OutputSchema(BaseModel):
+    """Output schema definition."""
+
+    name: str = Field(..., min_length=1, max_length=50, description="Output name")
+    type: str = Field(..., description="Output type")
+    description: Optional[str] = Field(None, max_length=200, description="Output description")
+
+    class Config:
+        extra = "forbid"
+```
+
+## YAML Configuration Management
+
+### Strict YAML Configuration
+```python
+# ✅ YAML configuration with strict validation
+import yaml
+from pydantic import BaseModel, Field, validator
+from typing import Dict, Any, Optional
+from pathlib import Path
+
+class YAMLConfig(BaseModel):
+    """YAML configuration with strict validation."""
+
+    version: str = Field(..., regex=r'^\d+\.\d+\.\d+$', description="Configuration version")
+    environment: str = Field(..., description="Environment name")
+
+    # Database configuration
+    database: Dict[str, Any] = Field(..., description="Database configuration")
+
+    # API configuration
+    api: Dict[str, Any] = Field(..., description="API configuration")
+
+    # Workflow configuration
+    workflows: Dict[str, Any] = Field(default_factory=dict, description="Workflow configuration")
+
+    @validator('database')
+    def validate_database(cls, v):
+        required_keys = ['url', 'pool_size', 'max_overflow']
+        for key in required_keys:
+            if key not in v:
+                raise ValueError(f'Database configuration missing required key: {key}')
+        return v
+
+    @validator('api')
+    def validate_api(cls, v):
+        required_keys = ['host', 'port', 'workers']
+        for key in required_keys:
+            if key not in v:
+                raise ValueError(f'API configuration missing required key: {key}')
+        return v
+
+    class Config:
+        extra = "forbid"
+
+def load_yaml_config(config_path: Path) -> YAMLConfig:
+    """Load and validate YAML configuration."""
+    try:
+        with open(config_path, 'r', encoding='utf-8') as f:
+            config_data = yaml.safe_load(f)
+
+        return YAMLConfig(**config_data)
+    except yaml.YAMLError as e:
+        raise ValueError(f'Invalid YAML configuration: {e}')
+    except Exception as e:
+        raise ValueError(f'Configuration validation failed: {e}')
+
+# ✅ Environment-specific configuration loading
+def load_config(environment: str = None) -> YAMLConfig:
+    """Load configuration for specific environment."""
+    if environment is None:
+        environment = os.getenv('ENVIRONMENT', 'development')
+
+    config_path = Path(f'config/{environment}.yaml')
+
+    if not config_path.exists():
+        raise FileNotFoundError(f'Configuration file not found: {config_path}')
+
+    return load_yaml_config(config_path)
+```
+
+## JSON Message Passing
+
+### Strict JSON Serialization
+```python
+# ✅ JSON message passing with strict validation
+import json
+from pydantic import BaseModel, Field, validator
+from typing import Dict, Any, Optional, Union
+from datetime import datetime
+from enum import Enum
+
+class MessageType(str, Enum):
+    """Message type enumeration."""
+    WORKFLOW_START = "workflow_start"
+    WORKFLOW_COMPLETE = "workflow_complete"
+    WORKFLOW_ERROR = "workflow_error"
+    ACTIVITY_START = "activity_start"
+    ACTIVITY_COMPLETE = "activity_complete"
+
+class BaseMessage(BaseModel):
+    """Base message with strict validation."""
+
+    message_id: str = Field(default_factory=lambda: str(uuid.uuid4()), description="Unique message ID")
+    message_type: MessageType = Field(..., description="Message type")
+    timestamp: datetime = Field(default_factory=datetime.utcnow, description="Message timestamp")
+    source: str = Field(..., min_length=1, max_length=100, description="Message source")
+    destination: Optional[str] = Field(None, min_length=1, max_length=100, description="Message destination")
+
+    # Message payload
+    payload: Dict[str, Any] = Field(default_factory=dict, description="Message payload")
+
+    # Metadata
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Message metadata")
+
+    @validator('payload')
+    def validate_payload(cls, v):
+        if not isinstance(v, dict):
+            raise ValueError('Payload must be a dictionary')
+        return v
+
+    @validator('metadata')
+    def validate_metadata(cls, v):
+        if not isinstance(v, dict):
+            raise ValueError('Metadata must be a dictionary')
+        return v
+
+    class Config:
+        use_enum_values = True
+        validate_assignment = True
+        extra = "forbid"
+
+class WorkflowMessage(BaseMessage):
+    """Workflow-specific message."""
+
+    message_type: MessageType = Field(default=MessageType.WORKFLOW_START, description="Message type")
+    workflow_id: str = Field(..., description="Workflow ID")
+    workflow_name: str = Field(..., description="Workflow name")
+
+    @validator('workflow_id')
+    def validate_workflow_id(cls, v):
+        if not v.strip():
+            raise ValueError('Workflow ID cannot be empty')
+        return v.strip()
+
+    @validator('workflow_name')
+    def validate_workflow_name(cls, v):
+        if not v.strip():
+            raise ValueError('Workflow name cannot be empty')
+        return v.strip()
+
+class ActivityMessage(BaseMessage):
+    """Activity-specific message."""
+
+    message_type: MessageType = Field(default=MessageType.ACTIVITY_START, description="Message type")
+    activity_id: str = Field(..., description="Activity ID")
+    activity_name: str = Field(..., description="Activity name")
+    actor_id: str = Field(..., description="Actor ID")
+
+    @validator('activity_id')
+    def validate_activity_id(cls, v):
+        if not v.strip():
+            raise ValueError('Activity ID cannot be empty')
+        return v.strip()
+
+# ✅ JSON serialization with strict validation
+def serialize_message(message: BaseMessage) -> str:
+    """Serialize message to JSON with strict validation."""
+    try:
+        return json.dumps(message.dict(), default=str, ensure_ascii=False, indent=2)
+    except Exception as e:
+        raise ValueError(f'Failed to serialize message: {e}')
+
+def deserialize_message(json_str: str, message_class: type[BaseMessage]) -> BaseMessage:
+    """Deserialize JSON to message with strict validation."""
+    try:
+        data = json.loads(json_str)
+        return message_class(**data)
+    except json.JSONDecodeError as e:
+        raise ValueError(f'Invalid JSON: {e}')
+    except Exception as e:
+        raise ValueError(f'Failed to deserialize message: {e}')
+
+# ✅ Message validation
+def validate_message(message: BaseMessage) -> bool:
+    """Validate message structure and content."""
+    try:
+        # Re-serialize and deserialize to ensure consistency
+        json_str = serialize_message(message)
+        deserialized = deserialize_message(json_str, type(message))
+
+        # Check if the deserialized message matches the original
+        return message.dict() == deserialized.dict()
+    except Exception:
+        return False
+```
+
+## Configuration Validation & Error Handling
+
+### Strict Validation Patterns
+```python
+# ✅ Configuration validation with detailed error messages
+from pydantic import ValidationError
+from typing import List, Dict, Any
+
+class ConfigurationError(Exception):
+    """Configuration validation error."""
+
+    def __init__(self, message: str, errors: List[Dict[str, Any]] = None):
+        super().__init__(message)
+        self.errors = errors or []
+
+def validate_configuration(config_data: Dict[str, Any]) -> YAMLConfig:
+    """Validate configuration with detailed error reporting."""
+    try:
+        return YAMLConfig(**config_data)
+    except ValidationError as e:
+        errors = []
+        for error in e.errors():
+            errors.append({
+                'field': '.'.join(str(x) for x in error['loc']),
+                'message': error['msg'],
+                'type': error['type'],
+                'input': error.get('input')
+            })
+
+        raise ConfigurationError(
+            f'Configuration validation failed with {len(errors)} errors',
+            errors
+        )
+
+def validate_environment_config(environment: str) -> bool:
+    """Validate environment-specific configuration."""
+    try:
+        config = load_config(environment)
+
+        # Additional environment-specific validations
+        if environment == 'production':
+            if config.database.get('echo', False):
+                raise ValueError('Database echo must be disabled in production')
+
+            if config.api.get('reload', False):
+                raise ValueError('API reload must be disabled in production')
+
+        return True
+    except Exception as e:
+        print(f'Environment configuration validation failed: {e}')
+        return False
+```
+
+## Best Practices Summary
+
+### Configuration Management
+- Use external configuration files for all constants and settings
+- Implement strict validation with Pydantic
+- Use environment-specific configurations
+- Validate all configuration at startup
+
+### Data Marshalling
+- Use Pydantic for all data validation and serialization
+- Implement strict JSON and YAML handling
+- Use enums for fixed value sets
+- Validate all data at boundaries
+
+### Error Handling
+- Provide detailed error messages for configuration issues
+- Use custom exception types for different error categories
+- Implement proper error recovery strategies
+- Log all configuration and validation errors
+
+### Type Safety
+- Use strict typing for all configuration models
+- Implement proper validation for all fields
+- Use enums for fixed value sets
+- Avoid any type usage

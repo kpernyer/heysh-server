@@ -1,0 +1,765 @@
+# Cursor Rules for Caddy & Hostname Management
+
+## Caddy Configuration & Hostname Management
+
+### Caddyfile Configuration
+- Use real hostnames instead of localhost and port numbers
+- Define all hostnames and ports in centralized configuration
+- Use Caddy for reverse proxy and SSL termination
+- Implement proper routing for all services
+
+```caddyfile
+# ✅ Caddyfile configuration
+# Global configuration
+{
+    # Enable automatic HTTPS
+    email admin@hey.sh
+    # Use Let's Encrypt for SSL certificates
+    acme_ca https://acme-v02.api.letsencrypt.org/directory
+}
+
+# Main application
+app.hey.sh {
+    # Frontend application
+    reverse_proxy frontend-service:3000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Enable compression
+    encode gzip
+
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        X-XSS-Protection "1; mode=block"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    }
+}
+
+# API backend
+api.hey.sh {
+    # Backend API
+    reverse_proxy backend-service:8000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # CORS configuration
+    @cors_preflight method OPTIONS
+    header @cors_preflight Access-Control-Allow-Origin "*"
+    header @cors_preflight Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+    header @cors_preflight Access-Control-Allow-Headers "Content-Type, Authorization"
+
+    # API rate limiting
+    rate_limit {
+        zone static {
+            key {remote_host}
+            events 100
+            window 1m
+        }
+    }
+
+    # Enable compression
+    encode gzip
+
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        X-XSS-Protection "1; mode=block"
+    }
+}
+
+# Temporal UI
+temporal.hey.sh {
+    # Temporal Web UI
+    reverse_proxy temporal-service:8080 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Basic authentication for Temporal UI
+    basicauth {
+        temporal $2a$14$encrypted_password_here
+    }
+}
+
+# Monitoring and observability
+grafana.hey.sh {
+    # Grafana dashboard
+    reverse_proxy grafana-service:3000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Basic authentication for Grafana
+    basicauth {
+        admin $2a$14$encrypted_password_here
+    }
+}
+
+# Prometheus metrics
+prometheus.hey.sh {
+    # Prometheus server
+    reverse_proxy prometheus-service:9090 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Basic authentication for Prometheus
+    basicauth {
+        prometheus $2a$14$encrypted_password_here
+    }
+}
+
+# Development environment
+dev.hey.sh {
+    # Development frontend
+    reverse_proxy frontend-dev-service:3000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
+dev-api.hey.sh {
+    # Development backend
+    reverse_proxy backend-dev-service:8000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+```
+
+## Centralized Configuration Management
+
+### Hostname and Port Configuration
+- Define all hostnames and ports in a single configuration file
+- Use environment-specific configurations
+- Implement strict port allocation to prevent conflicts
+- Use configuration validation
+
+```python
+# ✅ config/hostnames.py
+"""
+Centralized hostname and port configuration.
+All services must use these defined values to prevent conflicts.
+"""
+
+from typing import Dict, Any
+from pydantic import BaseSettings, Field, validator
+from enum import Enum
+
+class Environment(str, Enum):
+    """Environment enumeration."""
+    DEVELOPMENT = "development"
+    STAGING = "staging"
+    PRODUCTION = "production"
+
+class HostnameConfig(BaseSettings):
+    """Hostname and port configuration with strict validation."""
+
+    # Environment
+    environment: Environment = Field(default=Environment.DEVELOPMENT, description="Environment")
+
+    # Main application hostnames
+    app_hostname: str = Field(default="app.hey.sh", description="Main application hostname")
+    api_hostname: str = Field(default="api.hey.sh", description="API hostname")
+
+    # Development hostnames
+    dev_app_hostname: str = Field(default="dev.hey.sh", description="Development app hostname")
+    dev_api_hostname: str = Field(default="dev-api.hey.sh", description="Development API hostname")
+
+    # Monitoring hostnames
+    temporal_hostname: str = Field(default="temporal.hey.sh", description="Temporal UI hostname")
+    grafana_hostname: str = Field(default="grafana.hey.sh", description="Grafana hostname")
+    prometheus_hostname: str = Field(default="prometheus.hey.sh", description="Prometheus hostname")
+
+    # Port allocation (strict to prevent conflicts)
+    ports: Dict[str, int] = Field(
+        default={
+            "backend": 8000,
+            "frontend": 3000,
+            "temporal": 7233,
+            "temporal_ui": 8080,
+            "postgres": 5432,
+            "redis": 6379,
+            "grafana": 3000,
+            "prometheus": 9090,
+            "caddy": 80,
+            "caddy_https": 443,
+        },
+        description="Port allocation for all services"
+    )
+
+    # Service URLs
+    backend_url: str = Field(default="http://backend-service:8000", description="Backend service URL")
+    frontend_url: str = Field(default="http://frontend-service:3000", description="Frontend service URL")
+    temporal_url: str = Field(default="http://temporal-service:7233", description="Temporal service URL")
+    postgres_url: str = Field(default="postgresql://user:password@postgres-service:5432/hey_sh", description="PostgreSQL URL")
+    redis_url: str = Field(default="redis://redis-service:6379", description="Redis URL")
+
+    @validator('ports')
+    def validate_ports(cls, v):
+        """Validate that all ports are unique and within valid range."""
+        port_values = list(v.values())
+
+        # Check for duplicates
+        if len(port_values) != len(set(port_values)):
+            raise ValueError('All ports must be unique')
+
+        # Check port range
+        for service, port in v.items():
+            if not (1024 <= port <= 65535):
+                raise ValueError(f'Port {port} for {service} must be between 1024 and 65535')
+
+        return v
+
+    @validator('app_hostname', 'api_hostname')
+    def validate_hostnames(cls, v):
+        """Validate hostname format."""
+        if not v.endswith('.hey.sh'):
+            raise ValueError(f'Hostname {v} must end with .hey.sh')
+        return v
+
+    def get_service_url(self, service: str) -> str:
+        """Get service URL by name."""
+        if service == "backend":
+            return self.backend_url
+        elif service == "frontend":
+            return self.frontend_url
+        elif service == "temporal":
+            return self.temporal_url
+        elif service == "postgres":
+            return self.postgres_url
+        elif service == "redis":
+            return self.redis_url
+        else:
+            raise ValueError(f'Unknown service: {service}')
+
+    def get_port(self, service: str) -> int:
+        """Get port for service."""
+        if service not in self.ports:
+            raise ValueError(f'Unknown service: {service}')
+        return self.ports[service]
+
+    def get_hostname(self, service: str) -> str:
+        """Get hostname for service."""
+        if self.environment == Environment.DEVELOPMENT:
+            if service == "app":
+                return self.dev_app_hostname
+            elif service == "api":
+                return self.dev_api_hostname
+        else:
+            if service == "app":
+                return self.app_hostname
+            elif service == "api":
+                return self.api_hostname
+
+        # Monitoring services
+        if service == "temporal":
+            return self.temporal_hostname
+        elif service == "grafana":
+            return self.grafana_hostname
+        elif service == "prometheus":
+            return self.prometheus_hostname
+
+        raise ValueError(f'Unknown service: {service}')
+
+    class Config:
+        env_prefix = "HEY_SH_"
+        case_sensitive = False
+
+# Global configuration instance
+hostname_config = HostnameConfig()
+```
+
+### Environment-Specific Configuration
+```python
+# ✅ config/environments.py
+"""
+Environment-specific configuration.
+"""
+
+from config.hostnames import HostnameConfig, Environment
+
+class DevelopmentConfig(HostnameConfig):
+    """Development environment configuration."""
+
+    environment: Environment = Environment.DEVELOPMENT
+
+    # Development hostnames
+    app_hostname: str = "dev.hey.sh"
+    api_hostname: str = "dev-api.hey.sh"
+
+    # Development ports (different from production)
+    ports: Dict[str, int] = {
+        "backend": 8001,  # Different from production
+        "frontend": 3001,  # Different from production
+        "temporal": 7233,
+        "temporal_ui": 8081,  # Different from production
+        "postgres": 5432,
+        "redis": 6379,
+        "grafana": 3002,  # Different from production
+        "prometheus": 9091,  # Different from production
+        "caddy": 80,
+        "caddy_https": 443,
+    }
+
+class StagingConfig(HostnameConfig):
+    """Staging environment configuration."""
+
+    environment: Environment = Environment.STAGING
+
+    # Staging hostnames
+    app_hostname: str = "staging.hey.sh"
+    api_hostname: str = "staging-api.hey.sh"
+
+class ProductionConfig(HostnameConfig):
+    """Production environment configuration."""
+
+    environment: Environment = Environment.PRODUCTION
+
+    # Production hostnames
+    app_hostname: str = "app.hey.sh"
+    api_hostname: str = "api.hey.sh"
+
+def get_config(environment: str = None) -> HostnameConfig:
+    """Get configuration for specific environment."""
+    if environment is None:
+        environment = os.getenv('ENVIRONMENT', 'development')
+
+    if environment == 'development':
+        return DevelopmentConfig()
+    elif environment == 'staging':
+        return StagingConfig()
+    elif environment == 'production':
+        return ProductionConfig()
+    else:
+        raise ValueError(f'Unknown environment: {environment}')
+```
+
+## Port Conflict Resolution
+
+### Strict Port Management
+```python
+# ✅ config/ports.py
+"""
+Strict port management to prevent conflicts.
+All services must use these predefined ports.
+"""
+
+from typing import Dict, Set
+from pydantic import BaseModel, Field, validator
+
+class PortAllocation(BaseModel):
+    """Port allocation with conflict prevention."""
+
+    # Core application ports
+    backend: int = Field(default=8000, description="Backend API port")
+    frontend: int = Field(default=3000, description="Frontend application port")
+
+    # Database ports
+    postgres: int = Field(default=5432, description="PostgreSQL port")
+    redis: int = Field(default=6379, description="Redis port")
+
+    # Temporal ports
+    temporal: int = Field(default=7233, description="Temporal server port")
+    temporal_ui: int = Field(default=8080, description="Temporal UI port")
+
+    # Monitoring ports
+    grafana: int = Field(default=3000, description="Grafana port")
+    prometheus: int = Field(default=9090, description="Prometheus port")
+
+    # Caddy ports
+    caddy_http: int = Field(default=80, description="Caddy HTTP port")
+    caddy_https: int = Field(default=443, description="Caddy HTTPS port")
+
+    # Development ports (different from production)
+    dev_backend: int = Field(default=8001, description="Development backend port")
+    dev_frontend: int = Field(default=3001, description="Development frontend port")
+    dev_temporal_ui: int = Field(default=8081, description="Development Temporal UI port")
+    dev_grafana: int = Field(default=3002, description="Development Grafana port")
+    dev_prometheus: int = Field(default=9091, description="Development Prometheus port")
+
+    @validator('*')
+    def validate_port_range(cls, v):
+        """Validate port is in valid range."""
+        if not (1024 <= v <= 65535):
+            raise ValueError(f'Port {v} must be between 1024 and 65535')
+        return v
+
+    @root_validator
+    def validate_no_conflicts(cls, values):
+        """Validate no port conflicts."""
+        port_values = list(values.values())
+
+        # Check for duplicates
+        if len(port_values) != len(set(port_values)):
+            duplicates = [port for port in set(port_values) if port_values.count(port) > 1]
+            raise ValueError(f'Port conflicts detected: {duplicates}')
+
+        return values
+
+    def get_port(self, service: str, environment: str = 'production') -> int:
+        """Get port for service in specific environment."""
+        if environment == 'development':
+            dev_service = f'dev_{service}'
+            if hasattr(self, dev_service):
+                return getattr(self, dev_service)
+
+        if hasattr(self, service):
+            return getattr(self, service)
+
+        raise ValueError(f'Unknown service: {service}')
+
+    def get_all_ports(self, environment: str = 'production') -> Set[int]:
+        """Get all ports for environment."""
+        ports = set()
+
+        if environment == 'development':
+            ports.update([
+                self.dev_backend,
+                self.dev_frontend,
+                self.dev_temporal_ui,
+                self.dev_grafana,
+                self.dev_prometheus,
+                self.temporal,
+                self.postgres,
+                self.redis,
+                self.caddy_http,
+                self.caddy_https,
+            ])
+        else:
+            ports.update([
+                self.backend,
+                self.frontend,
+                self.temporal,
+                self.temporal_ui,
+                self.postgres,
+                self.redis,
+                self.grafana,
+                self.prometheus,
+                self.caddy_http,
+                self.caddy_https,
+            ])
+
+        return ports
+
+# Global port allocation
+port_allocation = PortAllocation()
+```
+
+## Docker Configuration with Caddy
+
+### Docker Compose with Caddy
+```yaml
+# ✅ docker-compose.yml
+version: '3.8'
+
+services:
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile
+      - caddy_data:/data
+      - caddy_config:/config
+    environment:
+      - CADDY_INGRESS_NETWORKS=caddy
+    networks:
+      - caddy
+      - app
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://user:password@postgres:5432/hey_sh
+      - REDIS_URL=redis://redis:6379
+      - TEMPORAL_ADDRESS=temporal:7233
+    networks:
+      - app
+    restart: unless-stopped
+    # No external ports - accessed through Caddy
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    environment:
+      - REACT_APP_API_URL=https://api.hey.sh
+    networks:
+      - app
+    restart: unless-stopped
+    # No external ports - accessed through Caddy
+
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      - POSTGRES_DB=hey_sh
+      - POSTGRES_USER=user
+      - POSTGRES_PASSWORD=password
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - app
+    restart: unless-stopped
+    # No external ports - internal service only
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redis_data:/data
+    networks:
+      - app
+    restart: unless-stopped
+    # No external ports - internal service only
+
+  temporal:
+    image: temporalio/auto-setup:latest
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=user
+      - POSTGRES_PWD=password
+      - POSTGRES_SEEDS=postgres
+    depends_on:
+      - postgres
+    networks:
+      - app
+    restart: unless-stopped
+    # No external ports - accessed through Caddy
+
+volumes:
+  caddy_data:
+  caddy_config:
+  postgres_data:
+  redis_data:
+
+networks:
+  caddy:
+    external: true
+  app:
+    driver: bridge
+```
+
+## Kubernetes Configuration with Caddy
+
+### Caddy Ingress Controller
+```yaml
+# ✅ k8s/caddy-ingress.yaml
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: hey-sh-ingress
+  namespace: hey-sh
+  annotations:
+    kubernetes.io/ingress.class: "caddy"
+    caddy.ingress.kubernetes.io/rewrite: "/"
+    caddy.ingress.kubernetes.io/tls: "true"
+spec:
+  tls:
+  - hosts:
+    - app.hey.sh
+    - api.hey.sh
+    - temporal.hey.sh
+    - grafana.hey.sh
+    - prometheus.hey.sh
+    secretName: hey-sh-tls
+  rules:
+  - host: app.hey.sh
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-service
+            port:
+              number: 3000
+  - host: api.hey.sh
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: backend-service
+            port:
+              number: 8000
+  - host: temporal.hey.sh
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: temporal-service
+            port:
+              number: 8080
+  - host: grafana.hey.sh
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: grafana-service
+            port:
+              number: 3000
+  - host: prometheus.hey.sh
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: prometheus-service
+            port:
+              number: 9090
+```
+
+## Documentation Organization
+
+### Documentation Structure
+```
+docs/
+├── README.md                    # Main documentation
+├── SETUP.md                     # Setup instructions
+├── DEPLOYMENT.md                # Deployment guide
+├── API.md                       # API documentation
+├── ARCHITECTURE.md              # Architecture overview
+├── DEVELOPMENT.md               # Development guide
+├── MONITORING.md                # Monitoring guide
+├── TROUBLESHOOTING.md           # Troubleshooting guide
+├── SECURITY.md                  # Security guide
+├── CONTRIBUTING.md              # Contributing guide
+├── CHANGELOG.md                 # Change log
+├── LICENSE.md                   # License information
+├── api/                         # API documentation
+│   ├── endpoints.md
+│   ├── authentication.md
+│   └── examples.md
+├── deployment/                  # Deployment documentation
+│   ├── docker.md
+│   ├── kubernetes.md
+│   ├── caddy.md
+│   └── monitoring.md
+├── development/                 # Development documentation
+│   ├── setup.md
+│   ├── testing.md
+│   ├── linting.md
+│   └── debugging.md
+└── architecture/                # Architecture documentation
+    ├── overview.md
+    ├── services.md
+    ├── data-flow.md
+    └── security.md
+```
+
+### Documentation Generation Rules
+```python
+# ✅ docs/generator.py
+"""
+Documentation generator with proper organization.
+"""
+
+from pathlib import Path
+from typing import Dict, Any
+import yaml
+
+class DocumentationGenerator:
+    """Generate documentation with proper organization."""
+
+    def __init__(self, docs_dir: Path = Path("docs")):
+        self.docs_dir = docs_dir
+        self.docs_dir.mkdir(exist_ok=True)
+
+    def generate_api_docs(self, api_spec: Dict[str, Any]) -> None:
+        """Generate API documentation."""
+        api_dir = self.docs_dir / "api"
+        api_dir.mkdir(exist_ok=True)
+
+        # Generate endpoints documentation
+        with open(api_dir / "endpoints.md", "w") as f:
+            f.write("# API Endpoints\n\n")
+            for endpoint, spec in api_spec.get("endpoints", {}).items():
+                f.write(f"## {endpoint}\n")
+                f.write(f"**Method:** {spec.get('method', 'GET')}\n")
+                f.write(f"**Description:** {spec.get('description', '')}\n\n")
+
+    def generate_deployment_docs(self, deployment_config: Dict[str, Any]) -> None:
+        """Generate deployment documentation."""
+        deployment_dir = self.docs_dir / "deployment"
+        deployment_dir.mkdir(exist_ok=True)
+
+        # Generate Docker documentation
+        with open(deployment_dir / "docker.md", "w") as f:
+            f.write("# Docker Deployment\n\n")
+            f.write("## Services\n\n")
+            for service, config in deployment_config.get("services", {}).items():
+                f.write(f"### {service}\n")
+                f.write(f"**Image:** {config.get('image', '')}\n")
+                f.write(f"**Port:** {config.get('port', '')}\n\n")
+
+    def generate_architecture_docs(self, architecture_config: Dict[str, Any]) -> None:
+        """Generate architecture documentation."""
+        architecture_dir = self.docs_dir / "architecture"
+        architecture_dir.mkdir(exist_ok=True)
+
+        # Generate overview documentation
+        with open(architecture_dir / "overview.md", "w") as f:
+            f.write("# Architecture Overview\n\n")
+            f.write("## Services\n\n")
+            for service, details in architecture_config.get("services", {}).items():
+                f.write(f"### {service}\n")
+                f.write(f"**Description:** {details.get('description', '')}\n")
+                f.write(f"**Port:** {details.get('port', '')}\n")
+                f.write(f"**Hostname:** {details.get('hostname', '')}\n\n")
+```
+
+## Best Practices Summary
+
+### Caddy Configuration
+- Use real hostnames instead of localhost and port numbers
+- Implement proper SSL termination and security headers
+- Use Caddy for reverse proxy and load balancing
+- Configure proper CORS and rate limiting
+
+### Port Management
+- Define all ports in centralized configuration
+- Implement strict port allocation to prevent conflicts
+- Use different ports for different environments
+- Validate port ranges and uniqueness
+
+### Configuration Centralization
+- Define all hostnames and ports in single configuration file
+- Use environment-specific configurations
+- Implement proper validation for all configuration values
+- Use Pydantic for configuration validation
+
+### Documentation Organization
+- Place all documentation under `docs/` directory
+- Organize documentation by category and purpose
+- Use consistent naming conventions
+- Generate documentation from configuration

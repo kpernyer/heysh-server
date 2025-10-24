@@ -1,0 +1,603 @@
+# Cursor Rules for TypeScript Frontend
+
+## TypeScript Configuration & Strict Typing
+
+### TypeScript Configuration
+- Use strict TypeScript configuration with `strict: true`
+- Enable `noImplicitAny: true` for strict typing
+- Use `noUnusedLocals: true` and `noUnusedParameters: true`
+- Enable `strictNullChecks: true` for null safety
+- Use path mapping with `@/*` for clean imports
+
+### Type Definitions
+- Define explicit types for all function parameters and return values
+- Use interfaces for object shapes, types for unions/primitives
+- Avoid `any` type - use `unknown` for truly dynamic content
+- Use generic types for reusable components and functions
+- Prefer type assertions over type casting
+
+```typescript
+// ✅ Good: Explicit typing
+interface User {
+  id: string;
+  email: string;
+  name: string;
+  createdAt: Date;
+}
+
+function createUser(userData: Omit<User, 'id' | 'createdAt'>): User {
+  return {
+    id: generateId(),
+    ...userData,
+    createdAt: new Date(),
+  };
+}
+
+// ❌ Bad: Implicit any
+function createUser(userData) {
+  return { ...userData };
+}
+```
+
+## Functional Programming Patterns
+
+### Pure Functions
+- Write pure functions whenever possible (no side effects)
+- Use immutable data structures
+- Prefer function composition over inheritance
+- Use higher-order functions for reusable logic
+
+```typescript
+// ✅ Pure function example
+const calculateTotal = (items: Item[]): number =>
+  items.reduce((sum, item) => sum + item.price, 0);
+
+// ✅ Function composition
+const processWorkflow = (workflow: WorkflowDefinition) =>
+  pipe(
+    validateWorkflow,
+    transformToYAML,
+    formatOutput
+  )(workflow);
+```
+
+### Immutable Data Patterns
+```typescript
+// ✅ Immutable updates
+const updateWorkflow = (workflow: WorkflowDefinition, updates: Partial<WorkflowDefinition>): WorkflowDefinition => ({
+  ...workflow,
+  ...updates,
+  updatedAt: new Date().toISOString(),
+});
+
+// ✅ Array operations
+const addActivity = (workflow: WorkflowDefinition, activity: Activity): WorkflowDefinition => ({
+  ...workflow,
+  activities: [...workflow.activities, activity],
+});
+```
+
+### Higher-Order Functions
+```typescript
+// ✅ Generic utility functions
+const createApiCall = <T, R>(
+  endpoint: string,
+  transform: (data: T) => R
+) => async (data: T): Promise<R> => {
+  const response = await fetch(endpoint, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+  const result = await response.json();
+  return transform(result);
+};
+
+// ✅ Function currying
+const createWorkflowValidator = (rules: ValidationRule[]) =>
+  (workflow: WorkflowDefinition) =>
+    rules.every(rule => rule.validate(workflow));
+```
+
+## React Patterns & Hooks
+
+### Custom Hooks
+- Extract reusable logic into custom hooks
+- Use proper dependency arrays in useEffect
+- Return consistent hook interfaces
+- Use TypeScript for hook parameters and return types
+
+```typescript
+// ✅ Custom hook with proper typing
+interface UseAuthReturn {
+  user: User | null;
+  session: Session | null;
+  loading: boolean;
+  token: string | null;
+  logout: () => void;
+}
+
+export function useAuth(): UseAuthReturn {
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Auth logic
+  }, []);
+
+  return { user, session, loading, token: null, logout: () => {} };
+}
+```
+
+### State Management
+- Use useState for local component state
+- Use useReducer for complex state logic
+- Prefer functional state updates
+- Use proper TypeScript for state types
+
+```typescript
+// ✅ Typed state with reducer
+interface WorkflowState {
+  workflow: WorkflowDefinition;
+  selectedActivityId?: string;
+  selectedActorId?: string;
+  edges: Edge[];
+}
+
+type WorkflowAction =
+  | { type: 'SELECT_ACTIVITY'; id: string }
+  | { type: 'SELECT_ACTOR'; id: string }
+  | { type: 'UPDATE_WORKFLOW'; workflow: WorkflowDefinition };
+
+const workflowReducer = (state: WorkflowState, action: WorkflowAction): WorkflowState => {
+  switch (action.type) {
+    case 'SELECT_ACTIVITY':
+      return { ...state, selectedActivityId: action.id };
+    case 'SELECT_ACTOR':
+      return { ...state, selectedActorId: action.id };
+    case 'UPDATE_WORKFLOW':
+      return { ...state, workflow: action.workflow };
+    default:
+      return state;
+  }
+};
+```
+
+## API Integration Patterns
+
+### API Client Functions
+- Create typed API functions with proper error handling
+- Use async/await for asynchronous operations
+- Implement proper error boundaries
+- Use generic types for API responses
+
+```typescript
+// ✅ Typed API function
+interface ApiResponse<T> {
+  data: T;
+  status: number;
+  message?: string;
+}
+
+interface WorkflowResponse {
+  workflow_id: string;
+  status: string;
+  message: string;
+}
+
+export async function uploadDocument(
+  documentId: string,
+  domainId: string,
+  filePath: string,
+  fileName: string
+): Promise<WorkflowResponse> {
+  const headers = await getAuthHeaders();
+
+  try {
+    const response = await fetch(`${API_URL}/api/v1/documents`, {
+      method: 'POST',
+      headers,
+      body: JSON.stringify({
+        document_id: documentId,
+        domain_id: domainId,
+        file_path: filePath,
+        name: fileName,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to upload document: ${response.statusText}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error('Upload error:', error);
+    throw error;
+  }
+}
+```
+
+### Error Handling
+```typescript
+// ✅ Proper error handling with types
+interface ApiError {
+  message: string;
+  status: number;
+  code?: string;
+}
+
+const handleApiError = (error: unknown): ApiError => {
+  if (error instanceof Error) {
+    return {
+      message: error.message,
+      status: 500,
+    };
+  }
+  return {
+    message: 'Unknown error occurred',
+    status: 500,
+  };
+};
+```
+
+## Component Patterns
+
+### Component Props Typing
+```typescript
+// ✅ Proper component props
+interface WorkflowBuilderProps {
+  initialWorkflow?: WorkflowDefinition;
+  onSave: (workflow: WorkflowDefinition) => void;
+  onTest?: (workflow: WorkflowDefinition) => void;
+  className?: string;
+}
+
+export function WorkflowBuilder({
+  initialWorkflow,
+  onSave,
+  onTest,
+  className
+}: WorkflowBuilderProps) {
+  // Component implementation
+}
+```
+
+### Event Handlers
+```typescript
+// ✅ Typed event handlers
+const handleWorkflowChange = useCallback((
+  workflow: WorkflowDefinition
+) => {
+  setWorkflow(workflow);
+  onSave?.(workflow);
+}, [onSave]);
+
+const handleActivitySelect = useCallback((
+  activityId: string
+) => {
+  setSelectedActivityId(activityId);
+}, []);
+```
+
+## Form Handling & Validation
+
+### Zod Schema Validation
+```typescript
+// ✅ Zod schema with proper typing
+const signupSchema = z.object({
+  email: z.string().trim().email({ message: "Invalid email address" }),
+  username: z.string().trim().min(3, { message: "Username must be at least 3 characters" }).max(50),
+  password: z.string().min(8, { message: "Password must be at least 8 characters" }),
+  confirmPassword: z.string()
+}).refine((data) => data.password === data.confirmPassword, {
+  message: "Passwords don't match",
+  path: ["confirmPassword"],
+});
+
+type SignupFormData = z.infer<typeof signupSchema>;
+```
+
+### React Hook Form Integration
+```typescript
+// ✅ Typed form handling
+const useWorkflowForm = (initialData?: WorkflowDefinition) => {
+  const form = useForm<WorkflowDefinition>({
+    defaultValues: initialData || createDefaultWorkflow(),
+    resolver: zodResolver(workflowSchema),
+  });
+
+  const onSubmit = useCallback((data: WorkflowDefinition) => {
+    // Handle form submission
+  }, []);
+
+  return { form, onSubmit };
+};
+```
+
+## Utility Functions & Helpers
+
+### Pure Utility Functions
+```typescript
+// ✅ Utility functions with proper typing
+export function cn(...inputs: ClassValue[]): string {
+  return twMerge(clsx(inputs));
+}
+
+export function generateId(): string {
+  return `${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
+}
+
+export function formatDate(date: Date | string): string {
+  return format(new Date(date), 'yyyy-MM-dd HH:mm:ss');
+}
+```
+
+### Type Guards
+```typescript
+// ✅ Type guards for runtime type checking
+export function isWorkflowDefinition(obj: unknown): obj is WorkflowDefinition {
+  return (
+    typeof obj === 'object' &&
+    obj !== null &&
+    'id' in obj &&
+    'name' in obj &&
+    'version' in obj &&
+    'actors' in obj &&
+    'activities' in obj
+  );
+}
+
+export function isApiError(error: unknown): error is ApiError {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'message' in error &&
+    'status' in error
+  );
+}
+```
+
+## Data Transformation
+
+### YAML/JSON Processing
+```typescript
+// ✅ Type-safe data transformation
+export function workflowToYAML(workflow: WorkflowDefinition): string {
+  const yamlObject: WorkflowYAML = {
+    version: workflow.version,
+    workflow: {
+      name: workflow.name,
+      description: workflow.description,
+    },
+    actors: workflow.actors.map(actor => ({
+      id: actor.id,
+      type: actor.type,
+      name: actor.name,
+      ...actor.config,
+    })),
+    // ... rest of transformation
+  };
+
+  return yaml.dump(cleanObject, {
+    indent: 2,
+    lineWidth: -1,
+    noRefs: true,
+  });
+}
+```
+
+### Array Operations
+```typescript
+// ✅ Functional array operations
+export const filterActiveWorkflows = (workflows: WorkflowDefinition[]): WorkflowDefinition[] =>
+  workflows.filter(workflow => workflow.isActive);
+
+export const sortWorkflowsByDate = (workflows: WorkflowDefinition[]): WorkflowDefinition[] =>
+  workflows.sort((a, b) =>
+    new Date(b.updatedAt || b.createdAt || '').getTime() -
+    new Date(a.updatedAt || a.createdAt || '').getTime()
+  );
+
+export const groupWorkflowsByDomain = (workflows: WorkflowDefinition[]): Record<string, WorkflowDefinition[]> =>
+  workflows.reduce((groups, workflow) => {
+    const domainId = workflow.domainId || 'unknown';
+    groups[domainId] = [...(groups[domainId] || []), workflow];
+    return groups;
+  }, {} as Record<string, WorkflowDefinition[]>);
+```
+
+## Async/Await Patterns
+
+### Promise Handling
+```typescript
+// ✅ Proper async/await usage
+export async function fetchWorkflows(domainId?: string): Promise<WorkflowDefinition[]> {
+  try {
+    const response = await fetch(`${API_URL}/api/v1/workflows${domainId ? `?domain_id=${domainId}` : ''}`);
+
+    if (!response.ok) {
+      throw new Error(`Failed to fetch workflows: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    return data.workflows || [];
+  } catch (error) {
+    console.error('Error fetching workflows:', error);
+    throw error;
+  }
+}
+```
+
+### Concurrent Operations
+```typescript
+// ✅ Concurrent async operations
+export async function fetchWorkflowData(workflowId: string): Promise<{
+  workflow: WorkflowDefinition;
+  status: WorkflowStatus;
+  results: WorkflowResults;
+}> {
+  const [workflow, status, results] = await Promise.all([
+    getWorkflow(workflowId),
+    getWorkflowStatus(workflowId),
+    getWorkflowResults(workflowId),
+  ]);
+
+  return { workflow, status, results };
+}
+```
+
+## Context & State Management
+
+### React Context with TypeScript
+```typescript
+// ✅ Typed context
+interface AuthContextType {
+  user: User | null;
+  session: Session | null;
+  loading: boolean;
+  token: string | null;
+  logout: () => void;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const useAuth = (): AuthContextType => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+```
+
+## Testing Patterns
+
+### Test Utilities
+```typescript
+// ✅ Test utilities with proper typing
+export const createMockWorkflow = (overrides?: Partial<WorkflowDefinition>): WorkflowDefinition => ({
+  id: 'test-workflow-1',
+  version: '1.0',
+  name: 'Test Workflow',
+  description: 'A test workflow',
+  actors: [],
+  activities: [],
+  workflowDefinition: {
+    start: '',
+    steps: [],
+  },
+  ...overrides,
+});
+
+export const createMockUser = (overrides?: Partial<User>): User => ({
+  id: 'test-user-1',
+  email: 'test@example.com',
+  // ... other required fields
+  ...overrides,
+});
+```
+
+## Performance Optimization
+
+### Memoization
+```typescript
+// ✅ Proper memoization with dependencies
+const MemoizedWorkflowBuilder = memo(WorkflowBuilder, (prevProps, nextProps) => {
+  return (
+    prevProps.initialWorkflow?.id === nextProps.initialWorkflow?.id &&
+    prevProps.onSave === nextProps.onSave &&
+    prevProps.onTest === nextProps.onTest
+  );
+});
+
+// ✅ useMemo for expensive calculations
+const processedWorkflows = useMemo(() => {
+  return workflows
+    .filter(workflow => workflow.isActive)
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+}, [workflows]);
+```
+
+### useCallback for Event Handlers
+```typescript
+// ✅ useCallback for stable references
+const handleWorkflowSave = useCallback((workflow: WorkflowDefinition) => {
+  onSave(workflow);
+  toast({
+    title: "Workflow Saved",
+    description: "Your workflow has been saved successfully.",
+  });
+}, [onSave, toast]);
+```
+
+## Error Boundaries & Error Handling
+
+### Error Boundary Component
+```typescript
+// ✅ Error boundary with proper typing
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error?: Error;
+}
+
+export class ErrorBoundary extends Component<PropsWithChildren, ErrorBoundaryState> {
+  constructor(props: PropsWithChildren) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Error caught by boundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return <ErrorFallback error={this.state.error} />;
+    }
+
+    return this.props.children;
+  }
+}
+```
+
+## Best Practices Summary
+
+### Code Organization
+- Use barrel exports (`index.ts`) for clean imports
+- Group related functionality in modules
+- Use consistent naming conventions
+- Prefer composition over inheritance
+
+### Type Safety
+- Avoid `any` type - use `unknown` for dynamic content
+- Use type guards for runtime type checking
+- Define explicit interfaces for all data structures
+- Use generic types for reusable components
+
+### Functional Programming
+- Write pure functions when possible
+- Use immutable data patterns
+- Prefer function composition
+- Use higher-order functions for reusable logic
+
+### Performance
+- Use React.memo for expensive components
+- Use useMemo and useCallback appropriately
+- Avoid unnecessary re-renders
+- Optimize bundle size with proper imports
+
+### Error Handling
+- Use proper error boundaries
+- Implement consistent error handling patterns
+- Use typed error objects
+- Provide meaningful error messages
+
+### Testing
+- Write typed test utilities
+- Use proper mocking patterns
+- Test both happy path and error cases
+- Maintain high test coverage

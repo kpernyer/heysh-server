@@ -1,0 +1,42 @@
+# AI Processing Worker Dockerfile
+# Optimized for AI/ML workloads with GPU support
+
+FROM nvidia/cuda:12.2.0-runtime-ubuntu22.04
+
+# Install Python and system dependencies
+RUN apt-get update && apt-get install -y \
+    software-properties-common \
+    && add-apt-repository -y ppa:deadsnakes/ppa \
+    && apt-get update && apt-get install -y \
+    python3.11 \
+    python3.11-venv \
+    python3-pip \
+    git \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# Set Python alias
+RUN update-alternatives --install /usr/bin/python python /usr/bin/python3.11 1 \
+    && update-alternatives --install /usr/bin/pip pip /usr/bin/pip3 1
+
+WORKDIR /app
+
+# Copy application code
+COPY . .
+
+# Install Python dependencies from pyproject.toml
+RUN pip install --no-cache-dir -e .
+
+# Set environment for GPU usage
+ENV CUDA_VISIBLE_DEVICES=0
+ENV PYTORCH_CUDA_ALLOC_CONF=max_split_size_mb:512
+ENV WORKER_TYPES=ai-processing
+
+EXPOSE 8080
+
+# Health check for Docker/local testing
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8080/health || exit 1
+
+# Run the AI worker
+CMD ["python", "-m", "worker.multiqueue_worker"]

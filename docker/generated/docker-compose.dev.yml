@@ -1,0 +1,205 @@
+version: '3.8'
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: hey-caddy
+    restart: unless-stopped
+    ports:
+    - 80:80
+    - 443:443
+    volumes:
+    - ./Caddyfile:/etc/caddy/Caddyfile
+    - caddy_data:/data
+    - caddy_config:/config
+    networks:
+    - hey-network
+    healthcheck:
+      test:
+      - CMD
+      - caddy
+      - health-check
+      - --config
+      - /etc/caddy/Caddyfile
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+    container_name: hey-frontend
+    restart: unless-stopped
+    volumes:
+    - .:/app
+    - /app/node_modules
+    environment:
+      VITE_SUPABASE_URL: ${VITE_SUPABASE_URL}
+      VITE_SUPABASE_ANON_KEY: ${VITE_SUPABASE_ANON_KEY}
+      VITE_TEMPORAL_ADDRESS: temporal:7235
+      VITE_TEMPORAL_NAMESPACE: default
+      VITE_API_URL: https://dev-api.hey.sh
+    command: pnpm run dev --host 0.0.0.0 --port 3004
+    networks:
+    - hey-network
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -f
+      - http://localhost:3004
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: hey-backend
+    restart: unless-stopped
+    volumes:
+    - ./backend:/app
+    environment:
+      DATABASE_URL: postgresql://hey_user:hey_password@postgres:5434/hey_db_dev
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: password
+      WEAVIATE_URL: http://weaviate:8080
+      TEMPORAL_HOST: temporal
+      TEMPORAL_PORT: '7235'
+      ENVIRONMENT: development
+    command: uv run uvicorn app.main:app --reload --host 0.0.0.0 --port 8002
+    depends_on:
+    - postgres
+    - neo4j
+    - weaviate
+    - temporal
+    networks:
+    - hey-network
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -f
+      - http://localhost:8002/health
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  postgres:
+    image: postgres:15-alpine
+    container_name: hey-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: hey_user
+      POSTGRES_PASSWORD: hey_password
+      POSTGRES_DB: hey_db_dev
+    volumes:
+    - postgres_data:/var/lib/postgresql/data
+    networks:
+    - hey-network
+    healthcheck:
+      test:
+      - CMD-SHELL
+      - pg_isready -U hey_user -d hey_db_dev
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  temporal:
+    image: temporalio/auto-setup:latest
+    container_name: hey-temporal
+    restart: unless-stopped
+    environment:
+      DB: postgresql
+      DB_PORT: '5434'
+      POSTGRES_USER: hey_user
+      POSTGRES_PWD: hey_password
+      POSTGRES_SEEDS: postgres
+    volumes:
+    - ./temporal-config:/etc/temporal/config/dynamicconfig
+    depends_on:
+    - postgres
+    networks:
+    - hey-network
+    healthcheck:
+      test:
+      - CMD
+      - temporal
+      - workflow
+      - list
+      - --address
+      - localhost:7235
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  temporal-ui:
+    image: temporalio/ui:latest
+    container_name: hey-temporal-ui
+    restart: unless-stopped
+    environment:
+      TEMPORAL_ADDRESS: temporal:7235
+      TEMPORAL_CORS_ORIGINS: https://dev.hey.sh,https://dev-api.hey.sh
+    depends_on:
+    - temporal
+    networks:
+    - hey-network
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -f
+      - http://localhost:8082
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  grafana:
+    image: grafana/grafana:latest
+    container_name: hey-grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+    volumes:
+    - grafana_data:/var/lib/grafana
+    networks:
+    - hey-network
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -f
+      - http://localhost:3005
+      interval: 30s
+      timeout: 10s
+      retries: 3
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: hey-prometheus
+    restart: unless-stopped
+    volumes:
+    - prometheus_data:/prometheus
+    - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml
+    command:
+    - --config.file=/etc/prometheus/prometheus.yml
+    - --storage.tsdb.path=/prometheus
+    - --web.console.libraries=/etc/prometheus/console_libraries
+    - --web.console.templates=/etc/prometheus/consoles
+    - --web.enable-lifecycle
+    networks:
+    - hey-network
+    healthcheck:
+      test:
+      - CMD
+      - curl
+      - -f
+      - http://localhost:9092
+      interval: 30s
+      timeout: 10s
+      retries: 3
+volumes:
+  caddy_data: {}
+  caddy_config: {}
+  postgres_data: {}
+  grafana_data: {}
+  prometheus_data: {}
+networks:
+  hey-network:
+    driver: bridge

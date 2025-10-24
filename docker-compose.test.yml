@@ -1,0 +1,185 @@
+version: '3.8'
+
+services:
+  # Temporal Server (enkel setup för testing)
+  temporal:
+    image: temporalio/auto-setup:latest
+    ports:
+      - "7233:7233"
+      - "8088:8088"  # Web UI
+    environment:
+      - DB=postgresql
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=temporal
+      - POSTGRES_SEEDS=postgres
+      - DYNAMIC_CONFIG_FILE_PATH=config/dynamicconfig/development-sql.yaml
+      - ENABLE_ES=false
+    networks:
+      - temporal-test
+    depends_on:
+      - postgres
+    healthcheck:
+      test: ["CMD", "temporal", "workflow", "list", "--namespace", "default"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # PostgreSQL for Temporal
+  postgres:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+    volumes:
+      - postgres-test-data:/var/lib/postgresql/data
+    networks:
+      - temporal-test
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Mock AI Service (ersätter riktiga AI API:er i test)
+  mock-ai:
+    build:
+      context: .
+      dockerfile: test/Dockerfile.mock-ai
+    ports:
+      - "8001:8000"
+    environment:
+      - DEFAULT_RELEVANCE_SCORE=7.5
+      - DEFAULT_RESPONSE_DELAY=0.5
+    networks:
+      - temporal-test
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Mock Weaviate (lightweight vector DB för test)
+  weaviate:
+    image: semitechnologies/weaviate:latest
+    ports:
+      - "8090:8080"
+      - "50051:50051"
+    environment:
+      QUERY_DEFAULTS_LIMIT: 25
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: 'true'
+      PERSISTENCE_DATA_PATH: '/var/lib/weaviate'
+      DEFAULT_VECTORIZER_MODULE: 'none'
+      CLUSTER_HOSTNAME: 'weaviate'
+    volumes:
+      - weaviate-test-data:/var/lib/weaviate
+    networks:
+      - temporal-test
+
+  # Neo4j Graph Database
+  neo4j:
+    image: neo4j:5-community
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      NEO4J_AUTH: neo4j/testpassword
+      NEO4J_dbms_memory_pagecache_size: 512M
+      NEO4J_dbms_memory_heap_max__size: 512M
+    volumes:
+      - neo4j-test-data:/data
+    networks:
+      - temporal-test
+
+  # MinIO (S3-compatible storage för test)
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio-test-data:/data
+    networks:
+      - temporal-test
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+
+  # Test Worker - All Queues (för lokal utveckling)
+  test-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      WORKER_TYPES: "general,storage,ai-processing"
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      # Mock services
+      AI_SERVICE_URL: http://mock-ai:8000
+      USE_MOCK_AI: "true"
+      # Storage
+      WEAVIATE_URL: http://weaviate:8080
+      NEO4J_URI: bolt://neo4j:7687
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: testpassword
+      MINIO_ENDPOINT: minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin
+      # Supabase mock
+      SUPABASE_URL: http://mock-supabase:8000
+      SUPABASE_KEY: test-key
+      # Logging
+      LOG_LEVEL: DEBUG
+    networks:
+      - temporal-test
+    depends_on:
+      temporal:
+        condition: service_healthy
+      mock-ai:
+        condition: service_healthy
+      weaviate:
+        condition: service_started
+      neo4j:
+        condition: service_started
+      minio:
+        condition: service_healthy
+    volumes:
+      - ./:/app
+      - /app/.venv  # Exclude venv from mount
+
+  # Test Runner - Kör automatiska tester
+  test-runner:
+    build:
+      context: .
+      dockerfile: test/Dockerfile.test-runner
+    environment:
+      TEMPORAL_ADDRESS: temporal:7233
+      TEMPORAL_NAMESPACE: default
+      TEST_MODE: integration
+      PYTEST_ARGS: "-v --tb=short"
+    networks:
+      - temporal-test
+    depends_on:
+      test-worker:
+        condition: service_started
+    volumes:
+      - ./test:/app/test
+      - ./test-results:/app/test-results
+    profiles:
+      - test
+
+networks:
+  temporal-test:
+    driver: bridge
+
+volumes:
+  postgres-test-data:
+  weaviate-test-data:
+  neo4j-test-data:
+  minio-test-data:

@@ -1,0 +1,49 @@
+version: 1
+model: gpt-4o
+temperature: 0.3
+max_tokens: 2000
+
+system: |
+  You are a document summarization assistant for the hey.sh knowledge platform.
+  Extract key information and create structured summaries that will help users
+  understand document content and enable better search and discovery.
+
+user_template: |
+  Document Title: {{ title }}
+  Domain: {{ domain }}
+
+  Content:
+  {{ content }}
+
+  Please provide:
+  1. A 2-3 sentence summary of the main points
+  2. Key topics (3-5 tags) that categorize this document
+  3. Main entities mentioned (people, organizations, concepts)
+  4. Suggested related documents or topics for cross-referencing
+
+  Format your response as structured JSON.
+
+output_schema:
+  type: object
+  properties:
+    summary:
+      type: string
+      description: Brief 2-3 sentence summary
+    topics:
+      type: array
+      items:
+        type: string
+      description: 3-5 key topic tags
+    entities:
+      type: array
+      items:
+        type: object
+        properties:
+          name: {type: string}
+          type: {type: string}
+      description: Named entities found in the document
+    related_suggestions:
+      type: array
+      items:
+        type: string
+      description: Suggested related topics or documents

@@ -1,0 +1,48 @@
+# Caddyfile for local development
+# Run with: caddy run --config docker/Caddyfile
+# Access services at: http://*.hey.local (no ports needed!)
+
+# Frontend
+app.hey.local {
+    reverse_proxy localhost:8081
+    log {
+        output stdout
+        format console
+    }
+}
+
+# Backend API
+api.hey.local {
+    reverse_proxy localhost:8001
+    log {
+        output stdout
+        format console
+    }
+}
+
+# Temporal UI
+temporal.hey.local {
+    reverse_proxy localhost:8090
+    log {
+        output stdout
+        format console
+    }
+}
+
+# Neo4j Browser
+neo4j.hey.local {
+    reverse_proxy localhost:7474
+    log {
+        output stdout
+        format console
+    }
+}
+
+# Weaviate
+weaviate.hey.local {
+    reverse_proxy localhost:8082
+    log {
+        output stdout
+        format console
+    }
+}

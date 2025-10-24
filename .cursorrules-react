@@ -1,0 +1,700 @@
+# Cursor Rules for React Frontend
+
+## React Component Patterns
+
+### Component Structure & Organization
+- Use functional components with hooks
+- Export components as default exports
+- Use proper TypeScript interfaces for props
+- Group related components in feature folders
+- Use consistent naming: PascalCase for components, camelCase for functions
+
+```typescript
+// ✅ Component structure
+interface WorkflowBuilderProps {
+  initialWorkflow?: WorkflowDefinition;
+  onSave: (workflow: WorkflowDefinition) => void;
+  onTest?: (workflow: WorkflowDefinition) => void;
+  className?: string;
+}
+
+export function WorkflowBuilder({
+  initialWorkflow,
+  onSave,
+  onTest,
+  className
+}: WorkflowBuilderProps) {
+  // Component implementation
+}
+```
+
+### Component Composition
+- Prefer composition over inheritance
+- Use children props for flexible layouts
+- Create reusable UI components
+- Use render props pattern when appropriate
+
+```typescript
+// ✅ Composition pattern
+interface CardProps {
+  children: React.ReactNode;
+  className?: string;
+  variant?: 'default' | 'outlined' | 'elevated';
+}
+
+export function Card({ children, className, variant = 'default' }: CardProps) {
+  return (
+    <div className={cn(
+      'rounded-lg border bg-card text-card-foreground shadow-sm',
+      {
+        'border-border': variant === 'default',
+        'border-2 border-primary': variant === 'outlined',
+        'shadow-lg': variant === 'elevated',
+      },
+      className
+    )}>
+      {children}
+    </div>
+  );
+}
+```
+
+## React Hooks Patterns
+
+### Custom Hooks
+- Extract reusable logic into custom hooks
+- Use proper TypeScript for hook parameters and return types
+- Follow the `use` prefix convention
+- Return consistent hook interfaces
+
+```typescript
+// ✅ Custom hook with proper typing
+interface UseAuthReturn {
+  user: User | null;
+  session: Session | null;
+  loading: boolean;
+  token: string | null;
+  logout: () => void;
+}
+
+export function useAuth(): UseAuthReturn {
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Auth logic
+  }, []);
+
+  return { user, session, loading, token: null, logout: () => {} };
+}
+```
+
+### State Management Hooks
+- Use useState for simple local state
+- Use useReducer for complex state logic
+- Use useCallback for stable function references
+- Use useMemo for expensive calculations
+
+```typescript
+// ✅ State management patterns
+export function WorkflowEditor({ initialWorkflow }: { initialWorkflow: WorkflowDefinition }) {
+  const [workflow, setWorkflow] = useState<WorkflowDefinition>(initialWorkflow);
+  const [selectedActivityId, setSelectedActivityId] = useState<string | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
+
+  // Memoized calculations
+  const workflowValidation = useMemo(() =>
+    validateWorkflow(workflow),
+    [workflow]
+  );
+
+  // Stable callbacks
+  const handleWorkflowChange = useCallback((newWorkflow: WorkflowDefinition) => {
+    setWorkflow(newWorkflow);
+    setIsDirty(true);
+  }, []);
+
+  const handleActivitySelect = useCallback((activityId: string) => {
+    setSelectedActivityId(activityId);
+  }, []);
+
+  return (
+    // Component JSX
+  );
+}
+```
+
+### Effect Hooks
+- Use useEffect for side effects
+- Include proper dependency arrays
+- Clean up subscriptions and timers
+- Use separate effects for different concerns
+
+```typescript
+// ✅ Effect patterns
+export function useWorkflowStatus(workflowId: string) {
+  const [status, setStatus] = useState<WorkflowStatus | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchStatus = async () => {
+      try {
+        const result = await getWorkflowStatus(workflowId);
+        if (isMounted) {
+          setStatus(result);
+        }
+      } catch (error) {
+        console.error('Failed to fetch workflow status:', error);
+      } finally {
+        if (isMounted) {
+          setLoading(false);
+        }
+      }
+    };
+
+    fetchStatus();
+
+    // Polling for status updates
+    const interval = setInterval(fetchStatus, 5000);
+
+    return () => {
+      isMounted = false;
+      clearInterval(interval);
+    };
+  }, [workflowId]);
+
+  return { status, loading };
+}
+```
+
+## Context & State Management
+
+### React Context Pattern
+- Create typed context with proper default values
+- Use custom hooks for context consumption
+- Provide error boundaries for context usage
+- Use multiple contexts for different concerns
+
+```typescript
+// ✅ Context pattern
+interface AuthContextType {
+  user: User | null;
+  session: Session | null;
+  loading: boolean;
+  token: string | null;
+  logout: () => void;
+}
+
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
+  const [user, setUser] = useState<User | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const handleLogout = useCallback(() => {
+    clearAuthData();
+    setUser(null);
+    setSession(null);
+  }, []);
+
+  const value = useMemo(() => ({
+    user,
+    session,
+    loading,
+    token: null,
+    logout: handleLogout,
+  }), [user, session, loading, handleLogout]);
+
+  return (
+    <AuthContext.Provider value={value}>
+      {children}
+    </AuthContext.Provider>
+  );
+};
+
+export const useAuth = (): AuthContextType => {
+  const context = useContext(AuthContext);
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider');
+  }
+  return context;
+};
+```
+
+### State Reducers
+- Use useReducer for complex state logic
+- Define proper action types
+- Use discriminated unions for actions
+- Keep reducers pure
+
+```typescript
+// ✅ Reducer pattern
+interface WorkflowState {
+  workflow: WorkflowDefinition;
+  selectedActivityId?: string;
+  selectedActorId?: string;
+  edges: Edge[];
+  isDirty: boolean;
+}
+
+type WorkflowAction =
+  | { type: 'SELECT_ACTIVITY'; id: string }
+  | { type: 'SELECT_ACTOR'; id: string }
+  | { type: 'UPDATE_WORKFLOW'; workflow: WorkflowDefinition }
+  | { type: 'ADD_ACTIVITY'; activity: Activity }
+  | { type: 'REMOVE_ACTIVITY'; id: string }
+  | { type: 'RESET_DIRTY' };
+
+const workflowReducer = (state: WorkflowState, action: WorkflowAction): WorkflowState => {
+  switch (action.type) {
+    case 'SELECT_ACTIVITY':
+      return { ...state, selectedActivityId: action.id };
+    case 'SELECT_ACTOR':
+      return { ...state, selectedActorId: action.id };
+    case 'UPDATE_WORKFLOW':
+      return {
+        ...state,
+        workflow: action.workflow,
+        isDirty: true
+      };
+    case 'ADD_ACTIVITY':
+      return {
+        ...state,
+        workflow: {
+          ...state.workflow,
+          activities: [...state.workflow.activities, action.activity]
+        },
+        isDirty: true
+      };
+    case 'REMOVE_ACTIVITY':
+      return {
+        ...state,
+        workflow: {
+          ...state.workflow,
+          activities: state.workflow.activities.filter(a => a.id !== action.id)
+        },
+        isDirty: true
+      };
+    case 'RESET_DIRTY':
+      return { ...state, isDirty: false };
+    default:
+      return state;
+  }
+};
+```
+
+## Form Handling & Validation
+
+### React Hook Form Integration
+- Use react-hook-form for form management
+- Integrate with Zod for validation
+- Use proper TypeScript types
+- Handle form state properly
+
+```typescript
+// ✅ Form handling
+const useWorkflowForm = (initialData?: WorkflowDefinition) => {
+  const form = useForm<WorkflowDefinition>({
+    defaultValues: initialData || createDefaultWorkflow(),
+    resolver: zodResolver(workflowSchema),
+  });
+
+  const onSubmit = useCallback(async (data: WorkflowDefinition) => {
+    try {
+      await saveWorkflow(data);
+      toast({
+        title: "Workflow Saved",
+        description: "Your workflow has been saved successfully.",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save workflow. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [toast]);
+
+  return { form, onSubmit };
+};
+
+// ✅ Form component
+export function WorkflowForm({ initialData, onSave }: WorkflowFormProps) {
+  const { form, onSubmit } = useWorkflowForm(initialData);
+
+  return (
+    <form onSubmit={form.handleSubmit(onSubmit)}>
+      <FormField
+        control={form.control}
+        name="name"
+        render={({ field }) => (
+          <FormItem>
+            <FormLabel>Workflow Name</FormLabel>
+            <FormControl>
+              <Input {...field} />
+            </FormControl>
+            <FormMessage />
+          </FormItem>
+        )}
+      />
+      {/* More form fields */}
+    </form>
+  );
+}
+```
+
+### Zod Schema Integration
+```typescript
+// ✅ Zod schema with React Hook Form
+const workflowSchema = z.object({
+  name: z.string().min(1, "Name is required"),
+  description: z.string().optional(),
+  version: z.string().min(1, "Version is required"),
+  actors: z.array(actorSchema).min(1, "At least one actor is required"),
+  activities: z.array(activitySchema).min(1, "At least one activity is required"),
+});
+
+type WorkflowFormData = z.infer<typeof workflowSchema>;
+```
+
+## Event Handling & User Interactions
+
+### Event Handler Patterns
+- Use useCallback for stable event handlers
+- Type event handlers properly
+- Handle async operations in event handlers
+- Provide proper loading states
+
+```typescript
+// ✅ Event handler patterns
+export function WorkflowBuilder({ onSave, onTest }: WorkflowBuilderProps) {
+  const [loading, setLoading] = useState(false);
+  const { toast } = useToast();
+
+  const handleSave = useCallback(async (workflow: WorkflowDefinition) => {
+    setLoading(true);
+    try {
+      await saveWorkflow(workflow);
+      onSave(workflow);
+      toast({
+        title: "Success",
+        description: "Workflow saved successfully",
+      });
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save workflow",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [onSave, toast]);
+
+  const handleTest = useCallback(async (workflow: WorkflowDefinition) => {
+    if (!onTest) return;
+
+    setLoading(true);
+    try {
+      await testWorkflow(workflow);
+      onTest(workflow);
+    } catch (error) {
+      toast({
+        title: "Test Failed",
+        description: "Workflow test failed",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [onTest, toast]);
+
+  return (
+    <div>
+      <Button onClick={() => handleSave(workflow)} disabled={loading}>
+        {loading ? "Saving..." : "Save"}
+      </Button>
+      <Button onClick={() => handleTest(workflow)} disabled={loading}>
+        {loading ? "Testing..." : "Test"}
+      </Button>
+    </div>
+  );
+}
+```
+
+### Keyboard & Accessibility
+```typescript
+// ✅ Accessibility patterns
+export function WorkflowActivityCard({ activity, onSelect, onEdit }: ActivityCardProps) {
+  const handleKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault();
+      onSelect(activity.id);
+    }
+  }, [activity.id, onSelect]);
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onSelect(activity.id)}
+      onKeyDown={handleKeyDown}
+      className="focus:outline-none focus:ring-2 focus:ring-primary"
+      aria-label={`Select activity ${activity.name}`}
+    >
+      {/* Activity content */}
+    </div>
+  );
+}
+```
+
+## Performance Optimization
+
+### Memoization Patterns
+- Use React.memo for expensive components
+- Use useMemo for expensive calculations
+- Use useCallback for stable function references
+- Avoid unnecessary re-renders
+
+```typescript
+// ✅ Memoization patterns
+const WorkflowActivity = memo(({ activity, onSelect }: ActivityProps) => {
+  const handleSelect = useCallback(() => {
+    onSelect(activity.id);
+  }, [activity.id, onSelect]);
+
+  return (
+    <div onClick={handleSelect}>
+      {/* Activity content */}
+    </div>
+  );
+}, (prevProps, nextProps) => {
+  return (
+    prevProps.activity.id === nextProps.activity.id &&
+    prevProps.onSelect === nextProps.onSelect
+  );
+});
+
+// ✅ Expensive calculations
+const WorkflowStats = ({ workflow }: { workflow: WorkflowDefinition }) => {
+  const stats = useMemo(() => ({
+    activityCount: workflow.activities.length,
+    actorCount: workflow.actors.length,
+    complexity: calculateComplexity(workflow),
+    estimatedDuration: estimateDuration(workflow),
+  }), [workflow]);
+
+  return (
+    <div>
+      <div>Activities: {stats.activityCount}</div>
+      <div>Actors: {stats.actorCount}</div>
+      <div>Complexity: {stats.complexity}</div>
+      <div>Duration: {stats.estimatedDuration}</div>
+    </div>
+  );
+};
+```
+
+### Lazy Loading & Code Splitting
+```typescript
+// ✅ Lazy loading
+const WorkflowBuilder = lazy(() => import('./WorkflowBuilder'));
+const WorkflowList = lazy(() => import('./WorkflowList'));
+
+export function App() {
+  return (
+    <Suspense fallback={<div>Loading...</div>}>
+      <Routes>
+        <Route path="/workflows" element={<WorkflowList />} />
+        <Route path="/workflows/:id/edit" element={<WorkflowBuilder />} />
+      </Routes>
+    </Suspense>
+  );
+}
+```
+
+## Error Handling & Boundaries
+
+### Error Boundary Component
+```typescript
+// ✅ Error boundary
+interface ErrorBoundaryState {
+  hasError: boolean;
+  error?: Error;
+}
+
+export class ErrorBoundary extends Component<PropsWithChildren, ErrorBoundaryState> {
+  constructor(props: PropsWithChildren) {
+    super(props);
+    this.state = { hasError: false };
+  }
+
+  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error: Error, errorInfo: ErrorInfo) {
+    console.error('Error caught by boundary:', error, errorInfo);
+    // Log to error reporting service
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="flex flex-col items-center justify-center p-8">
+          <h2 className="text-xl font-semibold mb-4">Something went wrong</h2>
+          <p className="text-muted-foreground mb-4">
+            We're sorry, but something unexpected happened.
+          </p>
+          <Button onClick={() => window.location.reload()}>
+            Reload Page
+          </Button>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
+```
+
+### Error Handling in Components
+```typescript
+// ✅ Error handling in components
+export function WorkflowList() {
+  const [workflows, setWorkflows] = useState<WorkflowDefinition[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchWorkflows = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+        const data = await listWorkflows();
+        setWorkflows(data.workflows);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to load workflows');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchWorkflows();
+  }, []);
+
+  if (loading) return <div>Loading workflows...</div>;
+  if (error) return <div>Error: {error}</div>;
+
+  return (
+    <div>
+      {workflows.map(workflow => (
+        <WorkflowCard key={workflow.id} workflow={workflow} />
+      ))}
+    </div>
+  );
+}
+```
+
+## Testing Patterns
+
+### Component Testing
+```typescript
+// ✅ Component testing
+describe('WorkflowBuilder', () => {
+  const mockWorkflow = createMockWorkflow();
+  const mockOnSave = jest.fn();
+  const mockOnTest = jest.fn();
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('renders workflow builder with initial data', () => {
+    render(
+      <WorkflowBuilder
+        initialWorkflow={mockWorkflow}
+        onSave={mockOnSave}
+        onTest={mockOnTest}
+      />
+    );
+
+    expect(screen.getByDisplayValue(mockWorkflow.name)).toBeInTheDocument();
+  });
+
+  it('calls onSave when save button is clicked', async () => {
+    render(
+      <WorkflowBuilder
+        initialWorkflow={mockWorkflow}
+        onSave={mockOnSave}
+        onTest={mockOnTest}
+      />
+    );
+
+    const saveButton = screen.getByRole('button', { name: /save/i });
+    await user.click(saveButton);
+
+    expect(mockOnSave).toHaveBeenCalledWith(expect.objectContaining({
+      name: mockWorkflow.name,
+    }));
+  });
+});
+```
+
+### Hook Testing
+```typescript
+// ✅ Hook testing
+describe('useAuth', () => {
+  it('returns user and session when authenticated', () => {
+    const mockUser = createMockUser();
+    const mockSession = createMockSession();
+
+    // Mock Supabase auth
+    jest.mocked(supabase.auth.getSession).mockResolvedValue({
+      data: { session: mockSession },
+      error: null,
+    });
+
+    const { result } = renderHook(() => useAuth());
+
+    expect(result.current.user).toEqual(mockUser);
+    expect(result.current.session).toEqual(mockSession);
+  });
+});
+```
+
+## Best Practices Summary
+
+### Component Design
+- Use functional components with hooks
+- Keep components focused and single-purpose
+- Use proper TypeScript interfaces
+- Prefer composition over inheritance
+
+### State Management
+- Use useState for simple state
+- Use useReducer for complex state
+- Use Context for global state
+- Keep state as local as possible
+
+### Performance
+- Use React.memo for expensive components
+- Use useMemo and useCallback appropriately
+- Implement lazy loading for large components
+- Optimize re-renders
+
+### Error Handling
+- Use error boundaries for component errors
+- Handle async errors properly
+- Provide meaningful error messages
+- Implement proper loading states
+
+### Testing
+- Test component behavior, not implementation
+- Use proper mocking for external dependencies
+- Test both happy path and error cases
+- Maintain high test coverage

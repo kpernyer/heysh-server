@@ -1,0 +1,134 @@
+# Global configuration
+{
+    # Enable automatic HTTPS for production
+    email admin@hey.sh
+    # Use Let's Encrypt for SSL certificates
+    acme_ca https://acme-v02.api.letsencrypt.org/directory
+}
+
+# Production hostnames
+app.hey.sh {
+    # Frontend application
+    reverse_proxy frontend-service:3000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Enable compression
+    encode gzip
+
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        X-XSS-Protection "1; mode=block"
+        Strict-Transport-Security "max-age=31536000; includeSubDomains"
+    }
+}
+
+# API backend
+api.hey.sh {
+    # Backend API
+    reverse_proxy backend-service:8000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # CORS configuration
+    @cors_preflight method OPTIONS
+    header @cors_preflight Access-Control-Allow-Origin "*"
+    header @cors_preflight Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+    header @cors_preflight Access-Control-Allow-Headers "Content-Type, Authorization"
+
+    # API rate limiting
+    rate_limit {
+        zone static {
+            key {remote_host}
+            events 100
+            window 1m
+        }
+    }
+
+    # Enable compression
+    encode gzip
+
+    # Security headers
+    header {
+        X-Content-Type-Options nosniff
+        X-Frame-Options DENY
+        X-XSS-Protection "1; mode=block"
+    }
+}
+
+# Temporal UI
+temporal.hey.sh {
+    # Temporal Web UI
+    reverse_proxy temporal-service:8080 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Basic authentication for Temporal UI
+    basicauth {
+        temporal $2a$14$encrypted_password_here
+    }
+}
+
+# Monitoring and observability
+grafana.hey.sh {
+    # Grafana dashboard
+    reverse_proxy grafana-service:3000 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Basic authentication for Grafana
+    basicauth {
+        admin $2a$14$encrypted_password_here
+    }
+}
+
+# Prometheus metrics
+prometheus.hey.sh {
+    # Prometheus server
+    reverse_proxy prometheus-service:9090 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+
+    # Basic authentication for Prometheus
+    basicauth {
+        prometheus $2a$14$encrypted_password_here
+    }
+}
+
+# Development environment
+dev.hey.sh {
+    # Development frontend
+    reverse_proxy frontend-dev-service:3001 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}
+
+dev-api.hey.sh {
+    # Development backend
+    reverse_proxy backend-dev-service:8001 {
+        header_up Host {host}
+        header_up X-Real-IP {remote}
+        header_up X-Forwarded-For {remote}
+        header_up X-Forwarded-Proto {scheme}
+    }
+}

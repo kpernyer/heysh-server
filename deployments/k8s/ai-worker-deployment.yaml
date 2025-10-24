@@ -1,0 +1,114 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-processing-worker
+  namespace: temporal-workers
+  labels:
+    app: temporal-worker
+    worker-type: ai-processing
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: temporal-worker
+      worker-type: ai-processing
+  template:
+    metadata:
+      labels:
+        app: temporal-worker
+        worker-type: ai-processing
+    spec:
+      nodeSelector:
+        workload-type: gpu
+      tolerations:
+        - key: nvidia.com/gpu
+          operator: Exists
+          effect: NoSchedule
+      containers:
+      - name: ai-worker
+        image: ${REGISTRY}/hey-sh-ai-worker:${VERSION}
+        imagePullPolicy: Always
+        env:
+        - name: WORKER_TYPES
+          value: "ai-processing"
+        - name: TEMPORAL_ADDRESS
+          valueFrom:
+            configMapKeyRef:
+              name: temporal-config
+              key: address
+        - name: TEMPORAL_NAMESPACE
+          valueFrom:
+            configMapKeyRef:
+              name: temporal-config
+              key: namespace
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ai-credentials
+              key: openai-api-key
+        - name: ANTHROPIC_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: ai-credentials
+              key: anthropic-api-key
+        resources:
+          requests:
+            memory: "8Gi"
+            cpu: "2"
+            nvidia.com/gpu: 1
+          limits:
+            memory: "16Gi"
+            cpu: "4"
+            nvidia.com/gpu: 1
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 30
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 10
+          periodSeconds: 10
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ai-processing-worker
+  namespace: temporal-workers
+spec:
+  selector:
+    app: temporal-worker
+    worker-type: ai-processing
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: health
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: ai-worker-hpa
+  namespace: temporal-workers
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: ai-processing-worker
+  minReplicas: 1
+  maxReplicas: 5
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: 70
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: 80
