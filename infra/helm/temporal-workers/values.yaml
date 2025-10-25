@@ -1,0 +1,145 @@
+# Default values for temporal-workers
+# This is a YAML-formatted file.
+
+# Global configuration
+global:
+  projectId: ""
+  region: "europe-west3"
+  environment: "production"
+
+# Image configuration
+image:
+  registry: "europe-west3-docker.pkg.dev"
+  repository: ""  # Will be set to: <projectId>/<repoName>
+  pullPolicy: Always
+  tag: "latest"
+
+# Namespace
+namespace: temporal-workers
+
+# Temporal configuration
+temporal:
+  address: ""  # e.g., europe-west3.gcp.api.temporal.io:7233
+  namespace: "default"
+  taskQueue: "hey-sh-workflows"
+
+# Worker configurations
+workers:
+  ai:
+    enabled: true
+    name: ai-processing-worker
+    replicas: 2
+    image:
+      name: hey-sh-ai-worker
+    workerTypes: "ai-processing"
+    resources:
+      requests:
+        memory: "8Gi"
+        cpu: "2"
+        nvidia.com/gpu: 1
+      limits:
+        memory: "16Gi"
+        cpu: "4"
+        nvidia.com/gpu: 1
+    nodeSelector:
+      workload-type: gpu
+    tolerations:
+      - key: nvidia.com/gpu
+        operator: Exists
+        effect: NoSchedule
+    autoscaling:
+      enabled: true
+      minReplicas: 1
+      maxReplicas: 5
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+
+  storage:
+    enabled: true
+    name: storage-worker
+    replicas: 3
+    image:
+      name: hey-sh-storage-worker
+    workerTypes: "storage"
+    resources:
+      requests:
+        memory: "2Gi"
+        cpu: "1"
+      limits:
+        memory: "4Gi"
+        cpu: "2"
+    nodeSelector:
+      workload-type: storage-optimized
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 10
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+
+  general:
+    enabled: true
+    name: general-worker
+    replicas: 3
+    image:
+      name: hey-sh-worker
+    workerTypes: "general"
+    resources:
+      requests:
+        memory: "1Gi"
+        cpu: "500m"
+      limits:
+        memory: "2Gi"
+        cpu: "1"
+    autoscaling:
+      enabled: true
+      minReplicas: 2
+      maxReplicas: 20
+      targetCPUUtilizationPercentage: 70
+      targetMemoryUtilizationPercentage: 80
+
+# Database configuration
+databases:
+  weaviate:
+    url: ""  # Will be fetched from GCP Secret Manager
+  neo4j:
+    uri: ""   # Will be fetched from GCP Secret Manager
+    user: ""  # Will be fetched from GCP Secret Manager
+  supabase:
+    url: ""   # Will be fetched from GCP Secret Manager
+
+# Secrets - References to GCP Secret Manager
+secrets:
+  useGCPSecretManager: true
+  gcpSecrets:
+    temporalApiKey: "TEMPORAL_API_KEY"
+    temporalNamespace: "TEMPORAL_NAMESPACE"
+    temporalAddress: "TEMPORAL_ADDRESS"
+    neo4jUri: "NEO4J_URI"
+    neo4jUser: "NEO4J_USER"
+    neo4jPassword: "NEO4J_PASSWORD"
+    weaviateUrl: "WEAVIATE_URL"
+    weaviateApiKey: "WEAVIATE_API_KEY"
+    openaiApiKey: "OPENAI_API_KEY"
+    anthropicApiKey: "ANTHROPIC_API_KEY"
+    supabaseUrl: "SUPABASE_URL"
+    supabaseKey: "SUPABASE_KEY"
+
+# Service Account for Workload Identity
+serviceAccount:
+  create: true
+  name: temporal-workers
+  annotations:
+    iam.gke.io/gcp-service-account: ""  # Will be set to: <env>-hey-sh-backend@<project>.iam.gserviceaccount.com
+
+# Health check configuration
+healthCheck:
+  enabled: true
+  port: 8080
+  path: /health
+  livenessProbe:
+    initialDelaySeconds: 30
+    periodSeconds: 30
+  readinessProbe:
+    initialDelaySeconds: 10
+    periodSeconds: 10

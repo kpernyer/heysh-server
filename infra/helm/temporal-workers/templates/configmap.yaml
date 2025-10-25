@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: temporal-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "temporal-workers.labels" . | nindent 4 }}
+data:
+  address: {{ .Values.temporal.address | quote }}
+  namespace: {{ .Values.temporal.namespace | quote }}
+  taskQueue: {{ .Values.temporal.taskQueue | quote }}

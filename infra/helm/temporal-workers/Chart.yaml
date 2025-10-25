@@ -1,0 +1,13 @@
+apiVersion: v2
+name: temporal-workers
+description: Temporal workflow workers for hey.sh platform
+type: application
+version: 0.1.0
+appVersion: "1.0"
+keywords:
+  - temporal
+  - workers
+  - hey.sh
+maintainers:
+  - name: Hey.sh Team
+    email: team@hey.sh

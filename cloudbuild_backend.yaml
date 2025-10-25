@@ -1,5 +1,23 @@
 steps:
   - name: 'gcr.io/cloud-builders/docker'
-    args: ['build', '-f', 'docker/Dockerfile', '-t', 'europe-west3-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:latest', '.']
+    args:
+      - 'build'
+      - '-f'
+      - 'docker/Dockerfile'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:${_VERSION}'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:latest'
+      - '.'
+
 images:
-  - 'europe-west3-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:latest'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:${_VERSION}'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:latest'
+
+substitutions:
+  _VERSION: 'latest'
+  _REGION: 'europe-west3'
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY

@@ -1,0 +1,103 @@
+# Full deployment pipeline triggered by git tags (v*)
+# This builds images and updates both Cloud Run and GKE deployments
+
+steps:
+  # Build all images in parallel
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'docker/Dockerfile'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:$TAG_NAME'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:latest'
+      - '.'
+    id: 'build-backend'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'Dockerfile'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-worker:$TAG_NAME'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-worker:latest'
+      - '.'
+    id: 'build-general-worker'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'deployments/Dockerfile.ai-worker'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-ai-worker:$TAG_NAME'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-ai-worker:latest'
+      - '.'
+    id: 'build-ai-worker'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'deployments/Dockerfile.storage-worker'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-storage-worker:$TAG_NAME'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-storage-worker:latest'
+      - '.'
+    id: 'build-storage-worker'
+
+  # Deploy backend to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: 'gcloud'
+    args:
+      - 'run'
+      - 'services'
+      - 'update'
+      - 'api'
+      - '--image=${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:$TAG_NAME'
+      - '--region=${_REGION}'
+      - '--project=$PROJECT_ID'
+    id: 'deploy-backend'
+    waitFor: ['build-backend']
+
+  # Deploy workers via Helm (requires GKE cluster)
+  - name: 'gcr.io/$PROJECT_ID/helm'  # You'll need to build a custom helm builder
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        gcloud container clusters get-credentials ${_DEPLOY_ENV}-hey-sh-cluster --region=${_REGION} --project=$PROJECT_ID
+        helm upgrade --install temporal-workers ./infra/helm/temporal-workers \
+          --namespace temporal-workers \
+          --create-namespace \
+          --set global.projectId=$PROJECT_ID \
+          --set global.region=${_REGION} \
+          --set global.environment=${_DEPLOY_ENV} \
+          --set image.repository=$PROJECT_ID/hey-sh-backend \
+          --set image.tag=$TAG_NAME \
+          --wait
+    id: 'deploy-workers'
+    waitFor: ['build-general-worker', 'build-ai-worker', 'build-storage-worker']
+
+images:
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:$TAG_NAME'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:latest'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-worker:$TAG_NAME'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-worker:latest'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-ai-worker:$TAG_NAME'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-ai-worker:latest'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-storage-worker:$TAG_NAME'
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-storage-worker:latest'
+
+substitutions:
+  _REGION: 'europe-west3'
+  _DEPLOY_ENV: 'production'
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY

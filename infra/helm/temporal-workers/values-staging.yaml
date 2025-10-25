@@ -1,0 +1,23 @@
+# Staging environment overrides
+
+global:
+  environment: staging
+
+workers:
+  ai:
+    replicas: 1
+    autoscaling:
+      minReplicas: 1
+      maxReplicas: 3
+
+  storage:
+    replicas: 2
+    autoscaling:
+      minReplicas: 1
+      maxReplicas: 5
+
+  general:
+    replicas: 2
+    autoscaling:
+      minReplicas: 1
+      maxReplicas: 10

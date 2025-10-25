@@ -1,0 +1,41 @@
+Thank you for installing {{ .Chart.Name }}!
+
+Your release is named {{ .Release.Name }}.
+
+To learn more about the release, try:
+
+  $ helm status {{ .Release.Name }} -n {{ .Values.namespace }}
+  $ helm get all {{ .Release.Name }} -n {{ .Values.namespace }}
+
+Workers deployed:
+{{- if .Values.workers.ai.enabled }}
+  - AI Processing Worker: {{ .Values.workers.ai.replicas }} replicas
+{{- end }}
+{{- if .Values.workers.storage.enabled }}
+  - Storage Worker: {{ .Values.workers.storage.replicas }} replicas
+{{- end }}
+{{- if .Values.workers.general.enabled }}
+  - General Worker: {{ .Values.workers.general.replicas }} replicas
+{{- end }}
+
+To view worker logs:
+{{- if .Values.workers.ai.enabled }}
+  $ kubectl logs -n {{ .Values.namespace }} -l worker-type=ai-processing -f
+{{- end }}
+{{- if .Values.workers.storage.enabled }}
+  $ kubectl logs -n {{ .Values.namespace }} -l worker-type=storage -f
+{{- end }}
+{{- if .Values.workers.general.enabled }}
+  $ kubectl logs -n {{ .Values.namespace }} -l worker-type=general -f
+{{- end }}
+
+IMPORTANT: Make sure to sync secrets from GCP Secret Manager:
+  $ kubectl create secret generic gcp-secrets \
+      --namespace={{ .Values.namespace }} \
+      --from-literal=temporal-address="$(gcloud secrets versions access latest --secret=TEMPORAL_ADDRESS)" \
+      --from-literal=temporal-namespace="$(gcloud secrets versions access latest --secret=TEMPORAL_NAMESPACE)" \
+      --from-literal=temporal-api-key="$(gcloud secrets versions access latest --secret=TEMPORAL_API_KEY)" \
+      # ... (see infra/k8s/sync-secrets.sh for full command)
+
+Or use the sync script:
+  $ ./infra/k8s/sync-secrets.sh

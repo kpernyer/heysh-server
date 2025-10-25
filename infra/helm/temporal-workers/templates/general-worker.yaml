@@ -1,0 +1,152 @@
+{{- if .Values.workers.general.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.workers.general.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "temporal-workers.labels" . | nindent 4 }}
+    app: temporal-worker
+    worker-type: general
+spec:
+  replicas: {{ .Values.workers.general.replicas }}
+  selector:
+    matchLabels:
+      app: temporal-worker
+      worker-type: general
+  template:
+    metadata:
+      labels:
+        app: temporal-worker
+        worker-type: general
+        {{- include "temporal-workers.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "temporal-workers.serviceAccountName" . }}
+      containers:
+      - name: general-worker
+        image: {{ include "temporal-workers.image" (dict "Values" .Values "imageName" .Values.workers.general.image.name) }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: WORKER_TYPES
+          value: {{ .Values.workers.general.workerTypes | quote }}
+        - name: TEMPORAL_ADDRESS
+          valueFrom:
+            secretKeyRef:
+              name: gcp-secrets
+              key: temporal-address
+        - name: TEMPORAL_NAMESPACE
+          valueFrom:
+            secretKeyRef:
+              name: gcp-secrets
+              key: temporal-namespace
+        - name: TEMPORAL_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: gcp-secrets
+              key: temporal-api-key
+        - name: TEMPORAL_TASK_QUEUE
+          valueFrom:
+            configMapKeyRef:
+              name: temporal-config
+              key: taskQueue
+        - name: SUPABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: gcp-secrets
+              key: supabase-url
+        - name: SUPABASE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: gcp-secrets
+              key: supabase-key
+        - name: NEO4J_URI
+          valueFrom:
+            secretKeyRef:
+              name: gcp-secrets
+              key: neo4j-uri
+        - name: NEO4J_USER
+          valueFrom:
+            secretKeyRef:
+              name: gcp-secrets
+              key: neo4j-user
+        - name: NEO4J_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: gcp-secrets
+              key: neo4j-password
+        - name: WEAVIATE_URL
+          valueFrom:
+            secretKeyRef:
+              name: gcp-secrets
+              key: weaviate-url
+        - name: WEAVIATE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: gcp-secrets
+              key: weaviate-api-key
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: gcp-secrets
+              key: openai-api-key
+        resources:
+          {{- toYaml .Values.workers.general.resources | nindent 10 }}
+        {{- if .Values.healthCheck.enabled }}
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.healthCheck.path }}
+            port: {{ .Values.healthCheck.port }}
+          {{- toYaml .Values.healthCheck.livenessProbe | nindent 10 }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.healthCheck.path }}
+            port: {{ .Values.healthCheck.port }}
+          {{- toYaml .Values.healthCheck.readinessProbe | nindent 10 }}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.workers.general.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "temporal-workers.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: temporal-worker
+    worker-type: general
+  ports:
+  - port: {{ .Values.healthCheck.port }}
+    targetPort: {{ .Values.healthCheck.port }}
+    name: health
+---
+{{- if .Values.workers.general.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Values.workers.general.name }}-hpa
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "temporal-workers.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.workers.general.name }}
+  minReplicas: {{ .Values.workers.general.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.workers.general.autoscaling.maxReplicas }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.workers.general.autoscaling.targetCPUUtilizationPercentage }}
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.workers.general.autoscaling.targetMemoryUtilizationPercentage }}
+{{- end }}
+{{- end }}

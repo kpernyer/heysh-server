@@ -1,0 +1,23 @@
+# Production environment overrides
+
+global:
+  environment: production
+
+workers:
+  ai:
+    replicas: 3
+    autoscaling:
+      minReplicas: 2
+      maxReplicas: 10
+
+  storage:
+    replicas: 5
+    autoscaling:
+      minReplicas: 3
+      maxReplicas: 15
+
+  general:
+    replicas: 5
+    autoscaling:
+      minReplicas: 3
+      maxReplicas: 30

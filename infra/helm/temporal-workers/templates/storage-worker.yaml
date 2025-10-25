@@ -1,0 +1,151 @@
+{{- if .Values.workers.storage.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ .Values.workers.storage.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "temporal-workers.labels" . | nindent 4 }}
+    app: temporal-worker
+    worker-type: storage
+spec:
+  replicas: {{ .Values.workers.storage.replicas }}
+  selector:
+    matchLabels:
+      app: temporal-worker
+      worker-type: storage
+  template:
+    metadata:
+      labels:
+        app: temporal-worker
+        worker-type: storage
+        {{- include "temporal-workers.selectorLabels" . | nindent 8 }}
+    spec:
+      serviceAccountName: {{ include "temporal-workers.serviceAccountName" . }}
+      {{- with .Values.workers.storage.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+      - name: storage-worker
+        image: {{ include "temporal-workers.image" (dict "Values" .Values "imageName" .Values.workers.storage.image.name) }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        env:
+        - name: WORKER_TYPES
+          value: {{ .Values.workers.storage.workerTypes | quote }}
+        - name: TEMPORAL_ADDRESS
+          valueFrom:
+            secretKeyRef:
+              name: gcp-secrets
+              key: temporal-address
+        - name: TEMPORAL_NAMESPACE
+          valueFrom:
+            secretKeyRef:
+              name: gcp-secrets
+              key: temporal-namespace
+        - name: TEMPORAL_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: gcp-secrets
+              key: temporal-api-key
+        - name: TEMPORAL_TASK_QUEUE
+          valueFrom:
+            configMapKeyRef:
+              name: temporal-config
+              key: taskQueue
+        - name: SUPABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: gcp-secrets
+              key: supabase-url
+        - name: SUPABASE_KEY
+          valueFrom:
+            secretKeyRef:
+              name: gcp-secrets
+              key: supabase-key
+        - name: NEO4J_URI
+          valueFrom:
+            secretKeyRef:
+              name: gcp-secrets
+              key: neo4j-uri
+        - name: NEO4J_USER
+          valueFrom:
+            secretKeyRef:
+              name: gcp-secrets
+              key: neo4j-user
+        - name: NEO4J_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: gcp-secrets
+              key: neo4j-password
+        - name: WEAVIATE_URL
+          valueFrom:
+            secretKeyRef:
+              name: gcp-secrets
+              key: weaviate-url
+        - name: WEAVIATE_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: gcp-secrets
+              key: weaviate-api-key
+        resources:
+          {{- toYaml .Values.workers.storage.resources | nindent 10 }}
+        {{- if .Values.healthCheck.enabled }}
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.healthCheck.path }}
+            port: {{ .Values.healthCheck.port }}
+          {{- toYaml .Values.healthCheck.livenessProbe | nindent 10 }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.healthCheck.path }}
+            port: {{ .Values.healthCheck.port }}
+          {{- toYaml .Values.healthCheck.readinessProbe | nindent 10 }}
+        {{- end }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ .Values.workers.storage.name }}
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "temporal-workers.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: temporal-worker
+    worker-type: storage
+  ports:
+  - port: {{ .Values.healthCheck.port }}
+    targetPort: {{ .Values.healthCheck.port }}
+    name: health
+---
+{{- if .Values.workers.storage.autoscaling.enabled }}
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: {{ .Values.workers.storage.name }}-hpa
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "temporal-workers.labels" . | nindent 4 }}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: {{ .Values.workers.storage.name }}
+  minReplicas: {{ .Values.workers.storage.autoscaling.minReplicas }}
+  maxReplicas: {{ .Values.workers.storage.autoscaling.maxReplicas }}
+  metrics:
+  - type: Resource
+    resource:
+      name: cpu
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.workers.storage.autoscaling.targetCPUUtilizationPercentage }}
+  - type: Resource
+    resource:
+      name: memory
+      target:
+        type: Utilization
+        averageUtilization: {{ .Values.workers.storage.autoscaling.targetMemoryUtilizationPercentage }}
+{{- end }}
+{{- end }}
