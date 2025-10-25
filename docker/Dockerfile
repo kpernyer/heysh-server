@@ -24,7 +24,7 @@ RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 ENV PATH="/root/.local/bin:$PATH"
 
 # Copy dependency files
-COPY pyproject.toml README.md ./
+COPY pyproject.toml README.md LICENSE ./
 
 # Install dependencies
 RUN uv pip install --system -e .
