@@ -1,18 +1,13 @@
-# Hey.sh Local Development - Caddy Configuration
-# Maps hostnames to local services for development
+# Hey.sh Production - Caddy Configuration
+# Maps production hostnames to services
 
 # =============================================================================
 # CORE APPLICATION SERVICES
 # =============================================================================
 
 # Frontend Application
-http://hey.local {
-    reverse_proxy host.docker.internal:3000 {
-        header_up Host {host}
-        header_up X-Real-IP {remote}
-        header_up X-Forwarded-For {remote}
-        header_up X-Forwarded-Proto {scheme}
-    }
+hey.sh {
+    reverse_proxy localhost:3000
     log {
         output stdout
         format console
@@ -20,13 +15,8 @@ http://hey.local {
 }
 
 # Frontend Application (www subdomain)
-http://www.hey.local {
-    reverse_proxy host.docker.internal:3000 {
-        header_up Host {host}
-        header_up X-Real-IP {remote}
-        header_up X-Forwarded-For {remote}
-        header_up X-Forwarded-Proto {scheme}
-    }
+www.hey.sh {
+    reverse_proxy localhost:3000
     log {
         output stdout
         format console
@@ -34,17 +24,8 @@ http://www.hey.local {
 }
 
 # Backend API
-http://api.hey.local {
-    reverse_proxy host.docker.internal:8002 {
-        header_up Host {host}
-        header_up X-Real-IP {remote}
-        header_up X-Forwarded-For {remote}
-        header_up X-Forwarded-Proto {scheme}
-    }
-    header Access-Control-Allow-Origin "*"
-    header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
-    header Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
-    header Access-Control-Allow-Credentials "true"
+api.hey.sh {
+    reverse_proxy localhost:8002
     log {
         output stdout
         format console
@@ -52,7 +33,7 @@ http://api.hey.local {
 }
 
 # Temporal UI
-temporal.hey.local {
+temporal.hey.sh {
     reverse_proxy localhost:8090
     log {
         output stdout
@@ -65,7 +46,7 @@ temporal.hey.local {
 # =============================================================================
 
 # PostgreSQL Database
-db.hey.local {
+db.hey.sh {
     reverse_proxy localhost:5432
     log {
         output stdout
@@ -74,7 +55,7 @@ db.hey.local {
 }
 
 # Neo4j Browser
-neo4j.hey.local {
+neo4j.hey.sh {
     reverse_proxy localhost:7474
     log {
         output stdout
@@ -83,7 +64,7 @@ neo4j.hey.local {
 }
 
 # Weaviate Vector Database
-weaviate.hey.local {
+weaviate.hey.sh {
     reverse_proxy localhost:8082
     log {
         output stdout
@@ -92,7 +73,7 @@ weaviate.hey.local {
 }
 
 # Redis Cache
-redis.hey.local {
+redis.hey.sh {
     reverse_proxy localhost:6379
     log {
         output stdout
@@ -101,7 +82,7 @@ redis.hey.local {
 }
 
 # MinIO Object Storage (Supabase alternative)
-supabase.hey.local {
+supabase.hey.sh {
     reverse_proxy localhost:9000
     log {
         output stdout
@@ -114,7 +95,7 @@ supabase.hey.local {
 # =============================================================================
 
 # Prometheus Metrics
-monitoring.hey.local {
+monitoring.hey.sh {
     reverse_proxy localhost:9090
     log {
         output stdout
@@ -123,7 +104,7 @@ monitoring.hey.local {
 }
 
 # Grafana Dashboards
-grafana.hey.local {
+grafana.hey.sh {
     reverse_proxy localhost:3001
     log {
         output stdout
@@ -132,7 +113,7 @@ grafana.hey.local {
 }
 
 # Alertmanager
-alertmanager.hey.local {
+alertmanager.hey.sh {
     reverse_proxy localhost:9093
     log {
         output stdout
@@ -141,7 +122,7 @@ alertmanager.hey.local {
 }
 
 # Jaeger Tracing
-jaeger.hey.local {
+jaeger.hey.sh {
     reverse_proxy localhost:16686
     log {
         output stdout
@@ -150,7 +131,7 @@ jaeger.hey.local {
 }
 
 # Loki Logs
-loki.hey.local {
+loki.hey.sh {
     reverse_proxy localhost:3100
     log {
         output stdout

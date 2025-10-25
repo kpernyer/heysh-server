@@ -1,7 +1,7 @@
 version: '3.8'
 
 services:
-  # Temporal server
+  # Temporal Server
   temporal:
     image: temporalio/auto-setup:latest
     ports:
@@ -21,7 +21,7 @@ services:
   temporal-ui:
     image: temporalio/ui:latest
     ports:
-      - "8090:8080"  # Using 8090 to avoid port conflicts
+      - "8090:8080"
     environment:
       - TEMPORAL_ADDRESS=temporal:7233
     depends_on:
@@ -29,78 +29,96 @@ services:
     networks:
       - hey-sh-network
 
-  # Neo4j graph database
-  neo4j:
-    image: neo4j:5-community
-    ports:
-      - "7474:7474"  # Browser
-      - "7687:7687"  # Bolt
-    environment:
-      - NEO4J_AUTH=neo4j/password
-      - NEO4J_PLUGINS=["graph-data-science","apoc"]
-      - NEO4J_dbms_security_procedures_unrestricted=gds.*,apoc.*
-    volumes:
-      - neo4j_data:/data
-    networks:
-      - hey-sh-network
-
-  # Weaviate vector database
-  weaviate:
-    image: semitechnologies/weaviate:latest
-    ports:
-      - "8082:8080"
-      - "50051:50051"  # gRPC port
-    environment:
-      - AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true
-      - PERSISTENCE_DATA_PATH=/var/lib/weaviate
-      - ENABLE_MODULES=text2vec-openai,generative-openai
-      - DEFAULT_VECTORIZER_MODULE=text2vec-openai
-      - OPENAI_APIKEY=${OPENAI_API_KEY:-}
-    volumes:
-      - weaviate_data:/var/lib/weaviate
-    networks:
-      - hey-sh-network
-
-  # PostgreSQL (for Temporal)
+  # PostgreSQL for Temporal
   postgres:
     image: postgres:15
     ports:
-      - "5433:5432"  # Using 5433 to avoid conflict with system PostgreSQL
+      - "5433:5432"
     environment:
-      - POSTGRES_USER=temporal
-      - POSTGRES_PASSWORD=temporal
-      - POSTGRES_DB=temporal
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: temporal
+      POSTGRES_DB: temporal
     volumes:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - hey-sh-network
 
-  # Backend API (optional, for local development)
-  # backend:
-  #   build:
-  #     context: ..
-  #     dockerfile: docker/Dockerfile
-  #   ports:
-  #     - "8000:8000"
-  #   environment:
-  #     - TEMPORAL_ADDRESS=temporal:7233
-  #     - NEO4J_URI=bolt://neo4j:7687
-  #     - WEAVIATE_URL=http://weaviate:8080
-  #     - POSTGRES_HOST=postgres
-  #   env_file:
-  #     - ../.env
-  #   depends_on:
-  #     - temporal
-  #     - neo4j
-  #     - weaviate
-  #     - postgres
-  #   networks:
-  #     - hey-sh-network
+  # Neo4j Graph Database
+  neo4j:
+    image: neo4j:5-community
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/password
+      - NEO4J_PLUGINS=["apoc"]
+    volumes:
+      - neo4j_data:/data
+    networks:
+      - hey-sh-network
+
+  # Weaviate Vector Database
+  weaviate:
+    image: semitechnologies/weaviate:latest
+    ports:
+      - "8082:8080"
+    environment:
+      - AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED=true
+      - PERSISTENCE_DATA_PATH=/var/lib/weaviate
+      - DEFAULT_VECTORIZER_MODULE=none
+      - ENABLE_MODULES=text2vec-openai,generative-openai
+      - CLUSTER_HOSTNAME=node1
+    volumes:
+      - weaviate_data:/var/lib/weaviate
+    networks:
+      - hey-sh-network
+
+  # Redis (optional, for caching)
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - hey-sh-network
+
+  # MinIO (optional, for S3-compatible storage)
+  minio:
+    image: minio/minio:latest
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      - MINIO_ROOT_USER=minioadmin
+      - MINIO_ROOT_PASSWORD=minioadmin
+    command: server /data --console-address ":9001"
+    volumes:
+      - minio_data:/data
+    networks:
+      - hey-sh-network
+
+  # Caddy Reverse Proxy
+  caddy:
+    image: caddy:2-alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - hey-sh-network
 
 volumes:
+  postgres_data:
   neo4j_data:
   weaviate_data:
-  postgres_data:
+  redis_data:
+  minio_data:
+  caddy_data:
+  caddy_config:
 
 networks:
   hey-sh-network:

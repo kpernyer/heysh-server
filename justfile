@@ -1,229 +1,290 @@
-# Hey.sh Server - Python Backend Justfile
+# Hey.sh Server - Local Development Justfile
 
-# Environment setup
-setup:
-    @echo "🚀 Setting up Hey.sh Server environment..."
-    @uv venv
-    @uv pip install -r requirements.txt
-    @echo "✅ Environment setup complete"
+# =============================================================================
+# SETUP COMMANDS
+# =============================================================================
 
-# Development commands
-dev:
-    @echo "🔧 Starting development environment..."
-    @just start-temporal &
-    @just start-workers &
-    @just start-api
+# Install dependencies
+install:
+    @echo "📦 Installing dependencies..."
+    @uv sync
+    @echo "✅ Dependencies installed"
 
-# Main development command
-start:
-    @echo "🚀 Starting Hey.sh Server..."
-    @echo "🌐 API Server: http://localhost:8002"
-    @echo "🔧 Hot reload enabled for code changes"
-    @uv run uvicorn service.main:app --reload --host 0.0.0.0 --port 8002
+# Build the project
+build:
+    @echo "🔨 Building project..."
+    @uv build
+    @echo "✅ Project built"
 
-# Temporal commands
-start-temporal:
-    @echo "🕐 Starting Temporal server..."
-    @if temporal workflow list --limit 1 >/dev/null 2>&1; then \
-        echo "✅ Temporal is already running!"; \
-        echo "🌐 Temporal UI: http://temporal.hey.sh"; \
+# =============================================================================
+# LOCAL DEVELOPMENT COMMANDS
+# =============================================================================
+
+# Main development command - brings up everything you need
+dev: install build
+    @echo "🚀 Starting Hey.sh Local Development Environment"
+    @echo ""
+    @just up-infra
+    @echo ""
+    @just verify
+    @echo ""
+    @echo "✅ Development environment ready!"
+    @echo "🌐 Frontend: http://hey.local"
+    @echo "🔧 API Server: http://api.hey.local (with hot reload)"
+    @echo "⏰ Temporal UI: http://temporal.hey.local"
+    @echo "🔗 Neo4j Browser: http://neo4j.hey.local"
+    @echo "🔍 Weaviate: http://weaviate.hey.local"
+    @echo "🗄️ Database: http://db.hey.local"
+    @echo "🔴 Redis: http://redis.hey.local"
+    @echo "📦 MinIO: http://supabase.hey.local"
+    @echo ""
+    @echo "Starting API server with hot reload..."
+    @uv run uvicorn src.service.api:app --reload --host 0.0.0.0 --port 8002
+
+# HTTPS development command - brings up everything with HTTPS
+dev-https: install build
+    @echo "🔐 Starting Hey.sh HTTPS Local Development Environment"
+    @echo ""
+    @just up-infra
+    @echo ""
+    @just verify
+    @echo ""
+    @echo "✅ HTTPS Development environment ready!"
+    @echo "🌐 Frontend: https://www.hey.local"
+    @echo "🔧 API Server: https://api.hey.local (with hot reload)"
+    @echo "⏰ Temporal UI: https://temporal.hey.local"
+    @echo "🔗 Neo4j Browser: https://neo4j.hey.local"
+    @echo "🔍 Weaviate: https://weaviate.hey.local"
+    @echo "🗄️ Database: https://db.hey.local"
+    @echo "🔴 Redis: https://redis.hey.local"
+    @echo "📦 MinIO: https://supabase.hey.local"
+    @echo ""
+    @echo "Starting API server with hot reload..."
+    @uv run uvicorn src.service.api:app --reload --host 0.0.0.0 --port 8002
+
+# Bring up infrastructure services (Temporal, Neo4j, Weaviate, etc.)
+up-infra:
+    @echo "🐳 Starting infrastructure services..."
+    @docker-compose -f docker/docker-compose.yml up -d
+    @echo "⏳ Waiting for services to be ready..."
+    @sleep 10
+    @echo "✅ Infrastructure services started"
+
+# Verify all services are running
+verify:
+    @echo "🔍 Verifying services..."
+    @echo ""
+    @echo "📊 Service Status:"
+    @echo "=================="
+    @if curl -s http://localhost:8002/health >/dev/null 2>&1; then \
+        echo "✅ API Server: http://localhost:8002"; \
     else \
-        echo "Starting Temporal Server..."; \
-        temporal server start-dev --ui-port $(python3 scripts/get_config.py temporal_ui port); \
+        echo "❌ API Server: Not running"; \
     fi
+    @if nc -z localhost 7233 2>/dev/null; then \
+        echo "✅ Temporal: localhost:7233 (gRPC)"; \
+    else \
+        echo "❌ Temporal: Not running"; \
+    fi
+    @if curl -s http://localhost:7474 >/dev/null 2>&1; then \
+        echo "✅ Neo4j: http://localhost:7474"; \
+    else \
+        echo "❌ Neo4j: Not running"; \
+    fi
+    @if curl -s http://localhost:8082 >/dev/null 2>&1; then \
+        echo "✅ Weaviate: http://localhost:8082"; \
+    else \
+        echo "❌ Weaviate: Not running"; \
+    fi
+    @if curl -s http://localhost:8090 >/dev/null 2>&1; then \
+        echo "✅ Temporal UI: http://localhost:8090"; \
+    else \
+        echo "❌ Temporal UI: Not running"; \
+    fi
+    @if curl -s http://localhost:80 >/dev/null 2>&1; then \
+        echo "✅ Caddy: http://localhost:80"; \
+    else \
+        echo "❌ Caddy: Not running"; \
+    fi
+    @echo ""
 
-start-workers:
+# Clean shutdown and restart
+reboot:
+    @echo "🔄 Rebooting development environment..."
+    @just clean
+    @just dev
+
+# Clean shutdown of all services
+clean:
+    @echo "🧹 Cleaning up development environment..."
+    @docker-compose -f docker/docker-compose.yml down
+    @docker-compose -f docker/docker-compose.yml down -v 2>/dev/null || true
+    @echo "✅ Cleanup complete"
+
+# =============================================================================
+# DEVELOPMENT TOOLS
+# =============================================================================
+
+# Start workers for development
+workers:
     @echo "👷 Starting Temporal workers..."
-    @uv run python worker/main.py
+    @uv run python -m src.worker.multiqueue_worker
 
-start-domain-bootstrap-worker:
-    @echo "🏗️  Starting Domain Bootstrap Worker..."
-    @echo "📋 Task Queue: hey-sh-workflows"
-    @echo "🔧 Activities: domain research, analysis, config generation, notifications"
-    @echo "📋 Workflows: StandaloneDomainBootstrapWorkflow"
-    @uv run python standalone_worker.py
+# Start Caddy for production hostnames (standalone)
+caddy-prod:
+    @echo "🌐 Starting Caddy for production hostnames..."
+    @caddy run --config docker/Caddyfile.production
 
-# API server
-start-api:
-    @echo "🌐 Starting FastAPI server..."
-    @uv run uvicorn service.main:app --reload --host 0.0.0.0 --port $(python3 scripts/get_config.py backend port)
+# Start Caddy with HTTPS for local development
+caddy-https:
+    @echo "🔐 Starting Caddy with HTTPS for local development..."
+    @caddy run --config docker/Caddyfile.https
 
-# Testing commands
+# Bootstrap installation of all external dependencies
+bootstrap:
+    @echo "🚀 Bootstrapping Hey.sh development environment..."
+    @./script/bootstrap-install.sh
+
+# Setup SSL certificates for local development
+setup-ssl:
+    @echo "🔐 Setting up SSL certificates for local development..."
+    @if ! command -v mkcert >/dev/null 2>&1; then \
+        echo "❌ mkcert is not installed. Please run 'just bootstrap' first"; \
+        exit 1; \
+    fi
+    @echo "📜 Installing CA certificate..."
+    @mkcert -install
+    @echo "🔑 Generating certificates for hey.local domains..."
+    @mkcert hey.local www.hey.local api.hey.local temporal.hey.local neo4j.hey.local weaviate.hey.local db.hey.local redis.hey.local minio.hey.local supabase.hey.local monitoring.hey.local grafana.hey.local alertmanager.hey.local jaeger.hey.local loki.hey.local
+    @echo "✅ SSL certificates generated!"
+    @echo "🔐 Certificates are in: hey.local+13.pem and hey.local+13-key.pem"
+    @echo "📝 Add these to your Caddyfile.https if needed"
+
+# Start monitoring services
+monitoring:
+    @echo "📊 Starting monitoring services..."
+    @docker-compose -f docker/docker-compose.monitoring.yml up -d
+    @echo "✅ Monitoring services started!"
+    @echo "📊 Prometheus: http://monitoring.hey.local"
+    @echo "📈 Grafana: http://grafana.hey.local"
+    @echo "🚨 Alertmanager: http://alertmanager.hey.local"
+    @echo "🔍 Jaeger: http://jaeger.hey.local"
+    @echo "📝 Loki: http://loki.hey.local"
+
+# Stop monitoring services
+monitoring-stop:
+    @echo "📊 Stopping monitoring services..."
+    @docker-compose -f docker/docker-compose.monitoring.yml down
+    @echo "✅ Monitoring services stopped!"
+
+# =============================================================================
+# TESTING
+# =============================================================================
+
+# Run tests
 test:
-    @echo "🧪 Running all tests..."
+    @echo "🧪 Running tests..."
     @uv run pytest test/ -v
 
-test-workflow:
-    @echo "🧪 Testing workflows..."
-    @uv run python test_standalone_bootstrap.py
+# Run tests with coverage
+test-coverage:
+    @echo "🧪 Running tests with coverage..."
+    @uv run pytest test/ --cov=src --cov-report=html --cov-report=term
 
-test-domain-bootstrap:
-    @echo "🧪 Testing domain bootstrap..."
-    @uv run python test_domain_bootstrap.py
+# Run API endpoint tests
+test-api:
+    @echo "🧪 Running API endpoint tests..."
+    @uv run pytest test/test_api_endpoints.py -v
 
-# Domain bootstrap workflow
-test-domain-bootstrap-real:
-    @echo "🚀 Testing Real Domain Bootstrap Workflow..."
-    @uv run python test_standalone_bootstrap.py
+# Run user endpoint tests
+test-users:
+    @echo "🧪 Running user endpoint tests..."
+    @uv run pytest test/test_user_endpoints.py -v
 
-approve-domain-bootstrap WORKFLOW_ID:
-    @echo "🎯 Approving Domain Bootstrap Workflow..."
-    @uv run python approve_domain_bootstrap.py $(WORKFLOW_ID)
+# Run membership endpoint tests
+test-membership:
+    @echo "🧪 Running membership endpoint tests..."
+    @uv run pytest test/test_membership_endpoints.py -v
 
-# Code quality
-lint:
-    @echo "🔍 Running linting..."
-    @uv run ruff check . --fix
-    @uv run black . --check
+# Run comprehensive test suite
+test-all:
+    @echo "🧪 Running comprehensive test suite..."
+    @uv run python test/run_tests.py
 
-lint-fix:
-    @echo "🔍 Running linting with fixes..."
-    @uv run ruff check . --fix
-    @uv run black .
+# =============================================================================
+# CODE QUALITY
+# =============================================================================
 
-type-check:
-    @echo "🔍 Running type checking..."
-    @uv run mypy .
-
+# Format code
 format:
     @echo "🎨 Formatting code..."
-    @uv run black .
-    @uv run ruff check . --fix
+    @uv run ruff format src/ test/
 
-# Security
-security:
-    @echo "🔒 Running security checks..."
-    @uv run bandit -r . -f json -o security-report.json
-    @uv run safety check
+# Lint code
+lint:
+    @echo "🔍 Linting code..."
+    @uv run ruff check src/ test/
 
-# Docker commands
-build:
-    @echo "🐳 Building Docker image..."
-    @docker build -t heysh-server .
+# Type check
+type-check:
+    @echo "🔍 Type checking..."
+    @uv run mypy src/
 
-run-docker:
-    @echo "🐳 Running Docker container..."
-    @docker run -p 8000:8000 heysh-server
+# =============================================================================
+# UTILITIES
+# =============================================================================
 
-# Deployment
-deploy-staging:
-    @echo "🚀 Deploying to staging..."
-    @echo "TODO: Implement staging deployment"
-
-deploy-prod:
-    @echo "🚀 Deploying to production..."
-    @echo "TODO: Implement production deployment"
-
-# Database commands
-migrate:
-    @echo "🗄️  Running database migrations..."
-    @uv run python scripts/migrate.py
-
-seed:
-    @echo "🌱 Seeding database..."
-    @uv run python scripts/seed.py
-
-# Monitoring
-health:
-    @echo "🏥 Checking service health..."
-    @uv run python scripts/health_check.py
-
-logs:
-    @echo "📋 Viewing logs..."
-    @tail -f logs/app.log
-
-# Cleanup
-clean:
-    @echo "🧹 Cleaning up..."
-    @rm -rf __pycache__/
-    @rm -rf .pytest_cache/
-    @rm -rf htmlcov/
-    @find . -name "*.pyc" -delete
-
-# Port and URL management
-ports:
-    @echo "🌐 Hey.sh Server Ports & URLs:"
-    @echo "  API Server (Dev):      http://localhost:8002"
-    @echo "  API Server (Staging):  http://localhost:8001"
-    @echo "  API Server (Prod):     https://api.hey.sh"
-    @echo ""
-    @echo "🔧 Backend Services:"
-    @echo "  Temporal Server:       localhost:7235"
-    @echo "  Temporal UI:           http://localhost:8082"
-    @echo "  PostgreSQL:            localhost:5434"
-    @echo "  Redis:                 localhost:6381"
-    @echo "  Weaviate:              http://localhost:8081"
-    @echo "  Neo4j:                 http://localhost:7474"
-    @echo ""
-    @echo "🌐 Frontend (heysh-workflow):"
-    @echo "  Frontend:              http://localhost:5173"
-
-# Status checking
+# Show service status
 status:
-    @echo "🔍 Hey.sh Server Status:"
-    @echo ""
-    @echo "🌐 API Server Status:"
-    @if curl -s http://localhost:8002/health > /dev/null 2>&1; then \
-        echo "  ✅ API Server: Running on http://localhost:8002"; \
-    else \
-        echo "  ❌ API Server: Not running - run 'just start'"; \
-    fi
-    @echo ""
-    @echo "🔧 Backend Services:"
-    @if curl -s http://localhost:8082 > /dev/null 2>&1; then \
-        echo "  ✅ Temporal UI: Running on http://localhost:8082"; \
-    else \
-        echo "  ❌ Temporal UI: Not running - run 'just start-temporal'"; \
-    fi
-    @if temporal workflow list --limit 1 >/dev/null 2>&1; then \
-        echo "  ✅ Temporal Server: Running on localhost:7235"; \
-    else \
-        echo "  ❌ Temporal Server: Not running - run 'just start-temporal'"; \
-    fi
-    @if curl -s http://localhost:8081/v1/.well-known/ready > /dev/null 2>&1; then \
-        echo "  ✅ Weaviate: Running on http://localhost:8081"; \
-    else \
-        echo "  ❌ Weaviate: Not running"; \
-    fi
-    @if curl -s http://localhost:7474 > /dev/null 2>&1; then \
-        echo "  ✅ Neo4j: Running on http://localhost:7474"; \
-    else \
-        echo "  ❌ Neo4j: Not running"; \
-    fi
+    @just verify
 
-# Help
+# Show logs
+logs:
+    @echo "📋 Showing service logs..."
+    @docker-compose -f docker/docker-compose.yml logs -f
+
+# Show help
 help:
-    @echo "Hey.sh Server Commands:"
+    @echo "Hey.sh Server - Local Development Commands"
+    @echo ""
+    @echo "🔧 Setup:"
+    @echo "  bootstrap             - Install all external dependencies (Docker, mkcert, just, uv, etc.)"
+    @echo "  install               - Install Python dependencies"
+    @echo "  build                 - Build the project"
     @echo ""
     @echo "🚀 Development:"
-    @echo "  start                    - Start API server with hot reload (main command)"
-    @echo "  dev                      - Start full development environment"
-    @echo "  setup                    - Setup development environment"
+    @echo "  dev                    - Start full development environment (HTTP)"
+    @echo "  dev-https              - Start full development environment (HTTPS)"
+    @echo "  up-infra              - Start infrastructure services only"
+    @echo "  verify                - Check if all services are running"
+    @echo "  reboot                - Clean restart everything"
+    @echo "  clean                 - Stop and clean up all services"
     @echo ""
-    @echo "🌐 Server Management:"
-    @echo "  start-temporal           - Start Temporal server"
-    @echo "  start-workers            - Start Temporal workers"
-    @echo "  start-api                - Start FastAPI server"
-    @echo "  ports                    - Show all ports and URLs"
-    @echo "  status                   - Check service status"
+    @echo "🔧 Development Tools:"
+    @echo "  bootstrap             - Install all external dependencies (Docker, mkcert, just, uv, etc.)"
+    @echo "  workers               - Start Temporal workers"
+    @echo "  caddy-prod            - Start Caddy for production hostnames"
+    @echo "  caddy-https            - Start Caddy with HTTPS for local development"
+    @echo "  setup-ssl             - Setup SSL certificates for local development"
+    @echo ""
+    @echo "📊 Monitoring:"
+    @echo "  monitoring            - Start monitoring services"
+    @echo "  monitoring-stop       - Stop monitoring services"
     @echo ""
     @echo "🧪 Testing:"
-    @echo "  test                     - Run all tests"
-    @echo "  test-workflow            - Test workflows"
-    @echo "  test-domain-bootstrap    - Test domain bootstrap"
+    @echo "  test                  - Run tests"
+    @echo "  test-coverage         - Run tests with coverage"
+    @echo "  test-api              - Run API endpoint tests"
+    @echo "  test-users            - Run user endpoint tests"
+    @echo "  test-membership       - Run membership endpoint tests"
+    @echo "  test-all              - Run comprehensive test suite"
     @echo ""
-    @echo "🔧 Code Quality:"
-    @echo "  lint                     - Run linting"
-    @echo "  type-check              - Run type checking"
-    @echo "  format                   - Format code"
-    @echo "  security                - Run security checks"
+    @echo "🎨 Code Quality:"
+    @echo "  format                - Format code"
+    @echo "  lint                  - Lint code"
+    @echo "  type-check            - Type check code"
     @echo ""
-    @echo "🚀 Deployment:"
-    @echo "  build                   - Build Docker image"
-    @echo "  deploy-staging           - Deploy to staging"
-    @echo "  deploy-prod              - Deploy to production"
-    @echo ""
-    @echo "🧹 Utilities:"
-    @echo "  health                   - Check service health"
-    @echo "  clean                    - Clean up files"
-    @echo "  help                     - Show this help"
+    @echo "📊 Utilities:"
+    @echo "  status                - Show service status"
+    @echo "  logs                  - Show service logs"
+    @echo "  help                  - Show this help"

@@ -38,10 +38,6 @@ COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/pytho
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Copy application code
-COPY workflow/ ./workflow/
-COPY activity/ ./activity/
-COPY worker/ ./worker/
-COPY service/ ./service/
 COPY src/ ./src/
 COPY prompt/ ./prompt/
 COPY tool/ ./tool/
@@ -56,4 +52,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8000/health || exit 1
 
 # Default command (can be overridden)
-CMD ["uvicorn", "service.api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "src.service.api:app", "--host", "0.0.0.0", "--port", "8000"]

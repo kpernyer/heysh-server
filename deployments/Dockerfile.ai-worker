@@ -39,4 +39,4 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
     CMD curl -f http://localhost:8080/health || exit 1
 
 # Run the AI worker
-CMD ["python", "-m", "worker.multiqueue_worker"]
+CMD ["python", "-m", "src.worker.multiqueue_worker"]

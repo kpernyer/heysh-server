@@ -1,0 +1,153 @@
+# HTTPS Local Development Configuration
+# Uses mkcert for local SSL certificates
+
+# Global options
+{
+    # Enable HTTPS
+    auto_https off
+    # Use mkcert for local certificates
+    local_certs
+}
+
+# Frontend - https://www.hey.local
+https://www.hey.local {
+    reverse_proxy host.docker.internal:3000
+    header Access-Control-Allow-Origin "*"
+    header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+    header Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+    header Access-Control-Allow-Credentials "true"
+    log {
+        output stdout
+        format console
+    }
+}
+
+# Frontend - https://hey.local (redirect to www)
+https://hey.local {
+    redir https://www.hey.local{uri} permanent
+    log {
+        output stdout
+        format console
+    }
+}
+
+# Backend API - https://api.hey.local
+https://api.hey.local {
+    reverse_proxy host.docker.internal:8002
+    header Access-Control-Allow-Origin "*"
+    header Access-Control-Allow-Methods "GET, POST, PUT, DELETE, OPTIONS"
+    header Access-Control-Allow-Headers "Content-Type, Authorization, X-Requested-With"
+    header Access-Control-Allow-Credentials "true"
+    log {
+        output stdout
+        format console
+    }
+}
+
+# Temporal UI - https://temporal.hey.local
+https://temporal.hey.local {
+    reverse_proxy host.docker.internal:8090
+    log {
+        output stdout
+        format console
+    }
+}
+
+# Neo4j - https://neo4j.hey.local
+https://neo4j.hey.local {
+    reverse_proxy host.docker.internal:7474
+    log {
+        output stdout
+        format console
+    }
+}
+
+# Weaviate - https://weaviate.hey.local
+https://weaviate.hey.local {
+    reverse_proxy host.docker.internal:8082
+    log {
+        output stdout
+        format console
+    }
+}
+
+# PostgreSQL - https://db.hey.local
+https://db.hey.local {
+    reverse_proxy host.docker.internal:5432
+    log {
+        output stdout
+        format console
+    }
+}
+
+# Redis - https://redis.hey.local
+https://redis.hey.local {
+    reverse_proxy host.docker.internal:6379
+    log {
+        output stdout
+        format console
+    }
+}
+
+# MinIO - https://minio.hey.local
+https://minio.hey.local {
+    reverse_proxy host.docker.internal:9000
+    log {
+        output stdout
+        format console
+    }
+}
+
+# Supabase (MinIO) - https://supabase.hey.local
+https://supabase.hey.local {
+    reverse_proxy host.docker.internal:9000
+    log {
+        output stdout
+        format console
+    }
+}
+
+# Monitoring - https://monitoring.hey.local
+https://monitoring.hey.local {
+    reverse_proxy host.docker.internal:9090
+    log {
+        output stdout
+        format console
+    }
+}
+
+# Grafana - https://grafana.hey.local
+https://grafana.hey.local {
+    reverse_proxy host.docker.internal:3001
+    log {
+        output stdout
+        format console
+    }
+}
+
+# Alertmanager - https://alertmanager.hey.local
+https://alertmanager.hey.local {
+    reverse_proxy host.docker.internal:9093
+    log {
+        output stdout
+        format console
+    }
+}
+
+# Jaeger - https://jaeger.hey.local
+https://jaeger.hey.local {
+    reverse_proxy host.docker.internal:16686
+    log {
+        output stdout
+        format console
+    }
+}
+
+# Loki - https://loki.hey.local
+https://loki.hey.local {
+    reverse_proxy host.docker.internal:3100
+    log {
+        output stdout
+        format console
+    }
+}

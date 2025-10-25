@@ -39,6 +39,9 @@ dependencies = [
     "python-dotenv>=1.0.0",
     "pyyaml>=6.0.0",
     "jsonschema>=4.20.0",
+    "strawberry-graphql[fastapi]>=0.215.0",
+    "python-jose[cryptography]>=3.3.0",
+    "email-validator>=2.0.0",
 ]
 
 [project.optional-dependencies]
@@ -52,7 +55,7 @@ dev = [
     "mypy>=1.7.0",
     "bandit>=1.7.0",
     "safety>=2.3.0",
-    "just>=1.14.0",
+    "just>=0.8.0",
     "uv>=0.1.0",
     "prometheus-client>=0.19.0",
 ]
@@ -168,4 +171,12 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "class .*\\bProtocol\\):",
     "@(abc\\.)?abstractmethod",
+]
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "pytest>=8.4.2",
+    "pytest-asyncio>=1.2.0",
+    "requests>=2.32.5",
 ]
