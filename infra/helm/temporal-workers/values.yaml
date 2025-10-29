@@ -49,7 +49,7 @@ workers:
         effect: NoSchedule
     autoscaling:
       enabled: true
-      minReplicas: 1
+      minReplicas: 0  # Scale to zero when idle
       maxReplicas: 5
       targetCPUUtilizationPercentage: 70
       targetMemoryUtilizationPercentage: 80
@@ -68,11 +68,17 @@ workers:
       limits:
         memory: "4Gi"
         cpu: "2"
+    # Use Spot instances for 80% cost savings
     nodeSelector:
-      workload-type: storage-optimized
+      cloud.google.com/gke-spot: "true"
+    tolerations:
+      - key: cloud.google.com/gke-spot
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
     autoscaling:
       enabled: true
-      minReplicas: 2
+      minReplicas: 1  # Reduced from 2
       maxReplicas: 10
       targetCPUUtilizationPercentage: 70
       targetMemoryUtilizationPercentage: 80
@@ -91,10 +97,18 @@ workers:
       limits:
         memory: "2Gi"
         cpu: "1"
+    # Use Spot instances for 80% cost savings
+    nodeSelector:
+      cloud.google.com/gke-spot: "true"
+    tolerations:
+      - key: cloud.google.com/gke-spot
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
     autoscaling:
       enabled: true
-      minReplicas: 2
-      maxReplicas: 20
+      minReplicas: 1  # Reduced from 2
+      maxReplicas: 10  # Reduced from 20
       targetCPUUtilizationPercentage: 70
       targetMemoryUtilizationPercentage: 80
 

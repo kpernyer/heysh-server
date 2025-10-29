@@ -51,7 +51,20 @@ resource "google_container_cluster" "hey_sh_cluster" {
     workload_pool = "${var.project_id}.svc.id.goog"
   }
 
+  # Enable vertical pod autoscaling for right-sizing (supported in Autopilot)
+  vertical_pod_autoscaling {
+    enabled = true
+  }
+
   deletion_protection = var.environment == "production" ? true : false
+}
+
+# BigQuery dataset for cluster usage monitoring
+resource "google_bigquery_dataset" "cluster_usage" {
+  dataset_id = "cluster_usage_${var.environment}"
+  location   = var.region
+
+  delete_contents_on_destroy = var.environment != "production"
 }
 
 # Artifact Registry for Docker images
@@ -356,5 +369,9 @@ resource "google_project_service" "secretmanager_api" {
 }
 resource "google_project_service" "artifactregistry_api" {
   service            = "artifactregistry.googleapis.com"
+  disable_on_destroy = false
+}
+resource "google_project_service" "bigquery_api" {
+  service            = "bigquery.googleapis.com"
   disable_on_destroy = false
 }

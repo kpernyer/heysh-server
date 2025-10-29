@@ -1,5 +1,6 @@
 """Request schemas."""
 
+from typing import Optional
 from pydantic import BaseModel, Field
 
 
@@ -7,15 +8,15 @@ class UploadDocumentRequest(BaseModel):
     """Request to upload and process a document."""
 
     document_id: str = Field(..., description="UUID of the document")
-    domain_id: str = Field(..., description="UUID of the domain")
+    topic_id: str = Field(..., description="UUID of the topic")
     file_path: str = Field(..., description="Path to file in Supabase Storage")
 
     class Config:
         json_schema_extra = {
             "example": {
                 "document_id": "123e4567-e89b-12d3-a456-426614174000",
-                "domain_id": "456e4567-e89b-12d3-a456-426614174001",
-                "file_path": "domain-456/document-123.pdf",
+                "topic_id": "456e4567-e89b-12d3-a456-426614174001",
+                "file_path": "topic-456/document-123.pdf",
             }
         }
 
@@ -25,7 +26,7 @@ class AskQuestionRequest(BaseModel):
 
     question_id: str = Field(..., description="UUID of the question")
     question: str = Field(..., description="Question text", min_length=10)
-    domain_id: str = Field(..., description="UUID of the domain")
+    topic_id: str = Field(..., description="UUID of the topic")
     user_id: str = Field(..., description="UUID of the user asking")
 
     class Config:
@@ -33,7 +34,7 @@ class AskQuestionRequest(BaseModel):
             "example": {
                 "question_id": "789e4567-e89b-12d3-a456-426614174002",
                 "question": "What is the process for deploying to production?",
-                "domain_id": "456e4567-e89b-12d3-a456-426614174001",
+                "topic_id": "456e4567-e89b-12d3-a456-426614174001",
                 "user_id": "012e4567-e89b-12d3-a456-426614174003",
             }
         }
@@ -45,7 +46,7 @@ class SubmitReviewRequest(BaseModel):
     review_id: str = Field(..., description="UUID of the review")
     reviewable_type: str = Field(..., description="Type: 'document' or 'answer'")
     reviewable_id: str = Field(..., description="UUID of the item being reviewed")
-    domain_id: str = Field(..., description="UUID of the domain")
+    topic_id: str = Field(..., description="UUID of the topic")
 
     class Config:
         json_schema_extra = {
@@ -53,7 +54,7 @@ class SubmitReviewRequest(BaseModel):
                 "review_id": "345e4567-e89b-12d3-a456-426614174004",
                 "reviewable_type": "document",
                 "reviewable_id": "123e4567-e89b-12d3-a456-426614174000",
-                "domain_id": "456e4567-e89b-12d3-a456-426614174001",
+                "topic_id": "456e4567-e89b-12d3-a456-426614174001",
             }
         }
 
@@ -63,7 +64,7 @@ class WorkflowDataRequest(BaseModel):
 
     name: str = Field(..., description="Workflow name")
     description: str | None = Field(None, description="Workflow description")
-    domain_id: str = Field(..., description="UUID of the domain")
+    topic_id: str = Field(..., description="UUID of the topic")
     yaml_definition: dict = Field(..., description="Workflow definition in YAML as dict")
     is_active: bool = Field(True, description="Whether workflow is active")
 
@@ -72,7 +73,7 @@ class WorkflowDataRequest(BaseModel):
             "example": {
                 "name": "Document Processing",
                 "description": "Process and index documents",
-                "domain_id": "456e4567-e89b-12d3-a456-426614174001",
+                "topic_id": "456e4567-e89b-12d3-a456-426614174001",
                 "yaml_definition": {"version": "1.0", "steps": []},
                 "is_active": True,
             }
@@ -83,7 +84,7 @@ class DocumentDataRequest(BaseModel):
     """Request to create a document reference."""
 
     name: str = Field(..., description="Document name")
-    domain_id: str = Field(..., description="UUID of the domain")
+    topic_id: str = Field(..., description="UUID of the topic")
     file_path: str = Field(..., description="Path in Supabase Storage")
     file_type: str | None = Field(None, description="MIME type")
     size_bytes: int | None = Field(None, description="File size in bytes")
@@ -92,9 +93,28 @@ class DocumentDataRequest(BaseModel):
         json_schema_extra = {
             "example": {
                 "name": "Architecture Guide",
-                "domain_id": "456e4567-e89b-12d3-a456-426614174001",
-                "file_path": "domain-456/docs/architecture.pdf",
+                "topic_id": "456e4567-e89b-12d3-a456-426614174001",
+                "file_path": "topic-456/docs/architecture.pdf",
                 "file_type": "application/pdf",
                 "size_bytes": 1024000,
+            }
+        }
+
+
+class CreateTopicRequest(BaseModel):
+    """Request to create a new topic."""
+
+    topic_id: str = Field(..., description="Unique topic identifier")
+    name: str = Field(..., description="Topic name")
+    description: Optional[str] = Field(None, description="Topic description")
+    created_by: str = Field(..., description="User ID who created the topic")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "topic_id": "topic-123",
+                "name": "Machine Learning",
+                "description": "A topic about machine learning and AI",
+                "created_by": "user-456",
             }
         }

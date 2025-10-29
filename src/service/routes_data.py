@@ -24,19 +24,19 @@ router = APIRouter(prefix="/api/v1", tags=["data"])
 
 @router.get("/workflows")
 async def list_workflows(
-    domain_id: str | None = None,
+    topic_id: str | None = None,
     user_id: CurrentUserId = None,
 ) -> dict[str, Any]:
-    """List workflows, optionally filtered by domain.
+    """List workflows, optionally filtered by topic.
 
     Requires: Valid JWT token in Authorization header
 
     Query params:
-        - domain_id: Filter by domain UUID (optional)
+        - topic_id: Filter by topic UUID (optional)
     """
     try:
-        if domain_id:
-            workflows = await WorkflowModel.get_by_domain(domain_id)
+        if topic_id:
+            workflows = await WorkflowModel.get_by_domain(topic_id)
         else:
             workflows = await WorkflowModel.list_all()
 
@@ -88,14 +88,14 @@ async def create_workflow(
 
     Request body:
         - name: Workflow name
-        - domain_id: Domain UUID
+        - topic_id: Topic UUID
         - yaml_definition: Workflow definition as dict
         - description: Optional description
     """
     try:
         workflow = await WorkflowModel.create_workflow(
             name=request.name,
-            domain_id=request.domain_id,
+            domain_id=request.topic_id,
             yaml_definition=request.yaml_definition,
             description=request.description,
         )
@@ -178,23 +178,23 @@ async def delete_workflow(workflow_id: str, user_id: CurrentUserId = None) -> No
 
 @router.get("/documents")
 async def list_documents(
-    domain_id: str | None = None,
+    topic_id: str | None = None,
     user_id: CurrentUserId = None,
 ) -> dict[str, Any]:
-    """List documents, optionally filtered by domain.
+    """List documents, optionally filtered by topic.
 
     Requires: Valid JWT token in Authorization header
 
     Query params:
-        - domain_id: Filter by domain UUID (optional)
+        - topic_id: Filter by topic UUID (optional)
     """
     try:
         supabase = get_supabase_client()
 
         query = supabase.table("documents").select("*")
 
-        if domain_id:
-            query = query.eq("domain_id", domain_id)
+        if topic_id:
+            query = query.eq("topic_id", topic_id)
 
         response = query.execute()
 
@@ -263,43 +263,43 @@ async def delete_document(document_id: str, user_id: CurrentUserId = None) -> No
         )
 
 
-# ==================== Domain Management ====================
+# ==================== Topic Management ====================
 
 
-@router.get("/domains")
-async def list_domains(user_id: CurrentUserId = None) -> dict[str, Any]:
-    """List all domains. Requires: Valid JWT token."""
+@router.get("/topics")
+async def list_topics(user_id: CurrentUserId = None) -> dict[str, Any]:
+    """List all topics. Requires: Valid JWT token."""
     try:
         supabase = get_supabase_client()
 
-        response = supabase.table("domains").select("*").execute()
+        response = supabase.table("topics").select("*").execute()
 
         return {
-            "domains": response.data,
+            "topics": response.data,
             "count": len(response.data),
         }
 
     except Exception as e:
-        logger.error("Failed to list domains", error=str(e))
+        logger.error("Failed to list topics", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to list domains: {e!s}",
+            detail=f"Failed to list topics: {e!s}",
         )
 
 
-@router.get("/domains/search")
-async def search_domains(
+@router.get("/topics/search")
+async def search_topics(
     q: str,
     user_id: CurrentUserId = None,
     use_llm: bool = True,
 ) -> dict[str, Any]:
-    """Semantic search across domains using Weaviate + Neo4j + LLM.
+    """Semantic search across topics using Weaviate + Neo4j + LLM.
 
     Query params:
         - q: Search query (required)
         - use_llm: Whether to use LLM to summarize results (default: true)
     """
-    logger.info("Searching domains", query=q[:50], use_llm=use_llm)
+    logger.info("Searching topics", query=q[:50], use_llm=use_llm)
 
     from activity.domain import search_domains_activity
     from src.app.clients.llm import get_llm_client
@@ -320,26 +320,26 @@ async def search_domains(
             llm = get_llm_client()
 
             # Prepare context for LLM
-            vector_domains = search_results["vector_results"]
-            graph_domains = search_results["graph_results"]
+            vector_topics = search_results["vector_results"]
+            graph_topics = search_results["graph_results"]
 
             context = "Vector search results (semantic similarity):\n"
-            for idx, domain in enumerate(vector_domains[:5], 1):
-                context += f"{idx}. {domain['name']}: {domain.get('description', 'No description')}\n"
+            for idx, topic in enumerate(vector_topics[:5], 1):
+                context += f"{idx}. {topic['name']}: {topic.get('description', 'No description')}\n"
 
             context += "\nGraph search results (keyword + relationships):\n"
-            for idx, domain in enumerate(graph_domains[:5], 1):
-                is_member = " (you are a member)" if domain.get("is_member") else ""
-                context += f"{idx}. {domain['name']}: {domain.get('description', 'No description')}{is_member}\n"
+            for idx, topic in enumerate(graph_topics[:5], 1):
+                is_member = " (you are a member)" if topic.get("is_member") else ""
+                context += f"{idx}. {topic['name']}: {topic.get('description', 'No description')}{is_member}\n"
 
             # Generate LLM summary
             prompt = f"""Based on the user's search query: "{q}"
 
-Here are the relevant domains found:
+Here are the relevant topics found:
 
 {context}
 
-Please provide a helpful summary of these domains, highlighting the most relevant ones for the user's query. Be concise and actionable."""
+Please provide a helpful summary of these topics, highlighting the most relevant ones for the user's query. Be concise and actionable."""
 
             llm_response = await llm.generate(
                 prompt=prompt,
@@ -374,23 +374,23 @@ Please provide a helpful summary of these domains, highlighting the most relevan
         )
 
 
-@router.get("/domains/{domain_id}")
-async def get_domain(domain_id: str, user_id: CurrentUserId = None) -> dict[str, Any]:
-    """Get a specific domain by ID. Requires: Valid JWT token."""
+@router.get("/topics/{topic_id}")
+async def get_topic(topic_id: str, user_id: CurrentUserId = None) -> dict[str, Any]:
+    """Get a specific topic by ID. Requires: Valid JWT token."""
     try:
         supabase = get_supabase_client()
 
         response = (
-            supabase.table("domains").select("*").eq("id", domain_id).single().execute()
+            supabase.table("topics").select("*").eq("id", topic_id).single().execute()
         )
 
         return response.data
 
     except Exception as e:
-        logger.error("Failed to get domain", domain_id=domain_id, error=str(e))
+        logger.error("Failed to get topic", topic_id=topic_id, error=str(e))
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Domain not found: {domain_id}",
+            detail=f"Topic not found: {topic_id}",
         )
 
 

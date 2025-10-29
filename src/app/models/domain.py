@@ -1,4 +1,4 @@
-"""Domain model for knowledge base domains."""
+"""Topic model for knowledge base topics."""
 
 from datetime import datetime
 from enum import Enum
@@ -8,78 +8,79 @@ from uuid import UUID, uuid4
 from pydantic import BaseModel, Field
 
 
-class DomainStatus(Enum):
-    """Domain status enumeration."""
+class TopicStatus(Enum):
+    """Topic status enumeration."""
     BOOTSTRAPPING = "bootstrapping"
     ACTIVE = "active"
     ARCHIVED = "archived"
     SUSPENDED = "suspended"
 
 
-class DomainRole(Enum):
-    """Domain role enumeration."""
+class TopicRole(Enum):
+    """Topic role enumeration."""
     OWNER = "owner"
     CONTRIBUTOR = "contributor"
-    VIEWER = "viewer"
+    CONTROLLER = "controller"
+    MEMBER = "member"
 
 
-class Domain(BaseModel):
-    """Domain model for knowledge base domains."""
-    
+class Topic(BaseModel):
+    """Topic model for knowledge base topics."""
+
     id: UUID = Field(default_factory=uuid4)
-    name: str = Field(..., description="Domain name")
-    description: str = Field(..., description="Domain description")
+    name: str = Field(..., description="Topic name")
+    description: str = Field(..., description="Topic description")
     owner_id: UUID = Field(..., description="Owner user ID")
-    status: DomainStatus = Field(default=DomainStatus.BOOTSTRAPPING)
+    status: TopicStatus = Field(default=TopicStatus.BOOTSTRAPPING)
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
-    
-    # Domain configuration
-    topics: List[str] = Field(default_factory=list, description="Core topics for this domain")
+
+    # Topic configuration
+    subtopics: List[str] = Field(default_factory=list, description="Core subtopics for this topic")
     quality_criteria: Dict[str, Any] = Field(default_factory=dict, description="Quality assessment criteria")
     search_attributes: Dict[str, Any] = Field(default_factory=dict, description="Search attributes for workflows")
-    
+
     # Bootstrap configuration
     bootstrap_prompt: Optional[str] = Field(None, description="Custom bootstrap research prompt")
     research_steps: List[str] = Field(default_factory=list, description="Research steps for bootstrapping")
-    target_audience: List[str] = Field(default_factory=list, description="Target audience for this domain")
-    
+    target_audience: List[str] = Field(default_factory=list, description="Target audience for this topic")
+
     # Knowledge base metrics
-    document_count: int = Field(default=0, description="Number of documents in domain")
+    document_count: int = Field(default=0, description="Number of documents in topic")
     contributor_count: int = Field(default=0, description="Number of contributors")
     last_activity: Optional[datetime] = Field(None, description="Last activity timestamp")
-    
+
     class Config:
         """Pydantic configuration."""
         use_enum_values = True
 
 
-class DomainMember(BaseModel):
-    """Domain member model."""
-    
-    domain_id: UUID = Field(..., description="Domain ID")
+class TopicMember(BaseModel):
+    """Topic member model."""
+
+    topic_id: UUID = Field(..., description="Topic ID")
     user_id: UUID = Field(..., description="User ID")
-    role: DomainRole = Field(..., description="User role in domain")
+    role: TopicRole = Field(..., description="User role in topic")
     joined_at: datetime = Field(default_factory=datetime.utcnow)
     permissions: List[str] = Field(default_factory=list, description="User permissions")
-    
+
     class Config:
         """Pydantic configuration."""
         use_enum_values = True
 
 
 class BootstrapInput(BaseModel):
-    """Input for domain bootstrap workflow."""
-    
-    domain_id: UUID = Field(..., description="Domain ID")
+    """Input for topic bootstrap workflow."""
+
+    topic_id: UUID = Field(..., description="Topic ID")
     owner_id: UUID = Field(..., description="Owner user ID")
-    domain_name: str = Field(..., description="Domain name")
-    domain_description: str = Field(..., description="Domain description")
-    initial_topics: List[str] = Field(default_factory=list, description="Initial topics provided by owner")
+    topic_name: str = Field(..., description="Topic name")
+    topic_description: str = Field(..., description="Topic description")
+    initial_subtopics: List[str] = Field(default_factory=list, description="Initial subtopics provided by owner")
     target_audience: List[str] = Field(default_factory=list, description="Target audience")
     research_focus: Optional[str] = Field(None, description="Specific research focus areas")
     quality_requirements: Dict[str, Any] = Field(default_factory=dict, description="Quality requirements")
-    
+
     # Bootstrap configuration
     research_depth: str = Field(default="comprehensive", description="Research depth: basic, comprehensive, expert")
     include_historical: bool = Field(default=True, description="Include historical research")
@@ -88,14 +89,14 @@ class BootstrapInput(BaseModel):
 
 
 class BootstrapResult(BaseModel):
-    """Result of domain bootstrap workflow."""
-    
-    domain_id: UUID = Field(..., description="Domain ID")
+    """Result of topic bootstrap workflow."""
+
+    topic_id: UUID = Field(..., description="Topic ID")
     status: str = Field(..., description="Bootstrap status")
     research_summary: str = Field(..., description="Research summary")
-    discovered_topics: List[str] = Field(default_factory=list, description="Discovered topics")
+    discovered_subtopics: List[str] = Field(default_factory=list, description="Discovered subtopics")
     quality_criteria: Dict[str, Any] = Field(default_factory=dict, description="Generated quality criteria")
     search_attributes: Dict[str, Any] = Field(default_factory=dict, description="Generated search attributes")
     research_sources: List[str] = Field(default_factory=list, description="Research sources used")
-    recommendations: List[str] = Field(default_factory=list, description="Recommendations for domain")
+    recommendations: List[str] = Field(default_factory=list, description="Recommendations for topic")
     completed_at: datetime = Field(default_factory=datetime.utcnow)

@@ -9,6 +9,7 @@ from temporalio.client import Client
 
 from src.app.schemas.requests import (
     AskQuestionRequest,
+    CreateTopicRequest,
     SubmitReviewRequest,
     UploadDocumentRequest,
 )
@@ -52,13 +53,13 @@ async def upload_document(request: UploadDocumentRequest) -> WorkflowResponse:
     logger.info(
         "Starting document processing workflow",
         document_id=request.document_id,
-        domain_id=request.domain_id,
+        topic_id=request.topic_id,
     )
 
     try:
         handle = await temporal_client.start_workflow(
             "DocumentProcessingWorkflow",
-            args=[request.document_id, request.domain_id, request.file_path],
+            args=[request.document_id, request.topic_id, request.file_path],
             id=f"doc-{request.document_id}",
             task_queue=os.getenv("TEMPORAL_TASK_QUEUE", "hey-sh-workflows"),
         )
@@ -99,7 +100,7 @@ async def ask_question(request: AskQuestionRequest) -> WorkflowResponse:
     logger.info(
         "Starting question answering workflow",
         question_id=request.question_id,
-        domain_id=request.domain_id,
+        topic_id=request.topic_id,
     )
 
     try:
@@ -108,7 +109,7 @@ async def ask_question(request: AskQuestionRequest) -> WorkflowResponse:
             args=[
                 request.question_id,
                 request.question,
-                request.domain_id,
+                request.topic_id,
                 request.user_id,
             ],
             id=f"question-{request.question_id}",
@@ -136,7 +137,7 @@ async def submit_review(request: SubmitReviewRequest) -> WorkflowResponse:
     """Trigger quality review workflow.
 
     This endpoint starts a Temporal workflow to:
-    1. Assign review to domain admin/controller
+    1. Assign review to topic admin/controller
     2. Wait for review decision
     3. Apply decision (approve/reject/rollback)
     4. Update quality scores
@@ -161,7 +162,7 @@ async def submit_review(request: SubmitReviewRequest) -> WorkflowResponse:
                 request.review_id,
                 request.reviewable_type,
                 request.reviewable_id,
-                request.domain_id,
+                request.topic_id,
             ],
             id=f"review-{request.review_id}",
             task_queue=os.getenv("TEMPORAL_TASK_QUEUE", "hey-sh-workflows"),
@@ -208,34 +209,45 @@ async def get_workflow_status(workflow_id: str) -> dict[str, Any]:
         ) from e
 
 
-@router.post("/domains", status_code=status.HTTP_201_CREATED)
-async def create_domain(domain_data: dict[str, Any]) -> dict[str, Any]:
-    """Create a new domain and index it in Weaviate and Neo4j.
+@router.post("/topics", status_code=status.HTTP_201_CREATED)
+async def create_topic(request: CreateTopicRequest) -> dict[str, Any]:
+    """Create a new topic and index it in Weaviate and Neo4j.
 
     Requires:
-        - domain_id: Unique domain identifier
-        - name: Domain name
-        - description: Domain description (optional)
-        - created_by: User ID who created the domain
+        - topic_id: Unique topic identifier
+        - name: Topic name
+        - description: Topic description (optional)
+        - created_by: User ID who created the topic
     """
-    logger.info("Creating domain", domain_id=domain_data.get("domain_id"))
+    logger.info("Creating topic", topic_id=request.topic_id)
 
     # Import activities directly for synchronous execution
     from activity.domain import index_domain_activity
 
     try:
-        # Index domain immediately (could be made async with workflow)
-        result = await index_domain_activity(domain_data)
+        # Prepare topic data
+        topic_data = {
+            "topic_id": request.topic_id,
+            "name": request.name,
+            "description": request.description,
+            "created_by": request.created_by,
+        }
+
+        # Index topic immediately (could be made async with workflow)
+        result = await index_domain_activity(topic_data)
 
         return {
-            "domain_id": result["domain_id"],
+            "topic_id": request.topic_id,
+            "name": request.name,
+            "description": request.description,
+            "created_by": request.created_by,
             "status": "indexed",
-            "message": "Domain created and indexed successfully",
+            "message": "Topic created and indexed successfully",
         }
 
     except Exception as e:
-        logger.error("Failed to create domain", error=str(e))
+        logger.error("Failed to create topic", error=str(e))
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to create domain: {e!s}",
+            detail=f"Failed to create topic: {e!s}",
         ) from e
