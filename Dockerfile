@@ -2,11 +2,21 @@
 
 FROM python:3.11-slim
 
+# Build arguments for version tracking
+ARG GIT_SHA
+ARG BUILD_TIME
+ARG ENVIRONMENT=production
+
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PIP_NO_CACHE_DIR=1
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Set build metadata as environment variables
+ENV GIT_SHA=${GIT_SHA}
+ENV BUILD_TIME=${BUILD_TIME}
+ENV ENVIRONMENT=${ENVIRONMENT}
 
 # Install system dependencies
 RUN apt-get update && apt-get install -y \

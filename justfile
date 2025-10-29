@@ -116,13 +116,16 @@ deploy-quick message="Quick deploy":
 
 # Global health check (everything working?)
 check environment="local":
-    @echo "🔍 Global Health Check: {{environment}}"
-    @echo "========================================"
-    @echo ""
-    @if [ "{{environment}}" = "local" ]; then \
-        just --quiet _check-local; \
-    else \
-        just --quiet _check-production; \
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    echo "🔍 Global Health Check: {{environment}}"
+    echo "========================================"
+    echo ""
+    if [ "{{environment}}" = "local" ]; then
+        just --quiet _check-local
+    else
+        just --quiet _check-production
     fi
 
 # Run tests (verify your code works)
@@ -502,43 +505,46 @@ _check-local:
 
 # Production health check
 _check-production:
-    @echo "🌐 Backend API (Cloud Run):"
-    @if curl -s https://api-blwol5d45q-ey.a.run.app/health >/dev/null 2>&1; then \
-        HEALTH=$$(curl -s https://api-blwol5d45q-ey.a.run.app/health | jq -r .status); \
-        echo "  ✅ https://api-blwol5d45q-ey.a.run.app - $$HEALTH"; \
-        curl -s https://api-blwol5d45q-ey.a.run.app/api/v1/topics 2>&1 | grep -q "Missing authorization" && echo "  ✅ /api/v1/topics - Requires auth (working)"; \
-    else \
-        echo "  ❌ Backend not responding"; \
-        echo "     Check: gcloud run services describe api --region=europe-west3"; \
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    echo "🌐 Backend API (Cloud Run):"
+    if curl -s https://api-blwol5d45q-ey.a.run.app/health >/dev/null 2>&1; then
+        HEALTH=$(curl -s https://api-blwol5d45q-ey.a.run.app/health | jq -r .status)
+        echo "  ✅ https://api-blwol5d45q-ey.a.run.app - $HEALTH"
+        curl -s https://api-blwol5d45q-ey.a.run.app/api/v1/topics 2>&1 | grep -q "Missing authorization" && echo "  ✅ /api/v1/topics - Requires auth (working)"
+    else
+        echo "  ❌ Backend not responding"
+        echo "     Check: gcloud run services describe api --region=europe-west3"
     fi
-    @echo ""
-    @echo "🐳 Docker Images (Artifact Registry):"
-    @LATEST=$$(gcloud artifacts docker tags list europe-west3-docker.pkg.dev/hey-sh-production/hey-sh-backend/service --limit=1 --format="value(tag)" 2>/dev/null | head -1); \
-    if [ -n "$$LATEST" ]; then \
-        echo "  ✅ Latest image: $$LATEST"; \
-    else \
-        echo "  ❌ No images found"; \
+    echo ""
+    echo "🐳 Docker Images (Artifact Registry):"
+    LATEST=$(gcloud artifacts docker tags list europe-west3-docker.pkg.dev/hey-sh-production/hey-sh-backend/service --limit=1 --format="value(tag)" 2>/dev/null | head -1)
+    if [ -n "$LATEST" ]; then
+        echo "  ✅ Latest image: $LATEST"
+    else
+        echo "  ❌ No images found"
     fi
-    @echo ""
-    @echo "👷 Workers (GKE):"
-    @PODS=$$(kubectl get pods -n temporal-workers --no-headers 2>/dev/null | wc -l | tr -d ' '); \
-    if [ "$$PODS" -gt 0 ]; then \
-        echo "  ✅ $$PODS pods running"; \
-        kubectl get pods -n temporal-workers --no-headers 2>/dev/null | awk '{print "     " $$1 " - " $$3}'; \
-    else \
-        echo "  ⚠️  No worker pods found"; \
-        echo "     Check: kubectl get pods -n temporal-workers"; \
+    echo ""
+    echo "👷 Workers (GKE):"
+    PODS=$(kubectl get pods -n temporal-workers --no-headers 2>/dev/null | wc -l | tr -d ' ')
+    if [ "$PODS" -gt 0 ]; then
+        echo "  ✅ $PODS pods running"
+        kubectl get pods -n temporal-workers --no-headers 2>/dev/null | awk '{print "     " $1 " - " $3}'
+    else
+        echo "  ⚠️  No worker pods found"
+        echo "     Check: kubectl get pods -n temporal-workers"
     fi
-    @echo ""
-    @echo "📊 Recent Deployments:"
-    @gcloud builds list --limit 3 --format="table(createTime.date(tz=LOCAL),substitutions.TAG_NAME,status)" 2>/dev/null || echo "  ⚠️  Cannot fetch (run: gcloud auth login)"
-    @echo ""
-    @echo "Summary:"
-    @echo "  • Backend should show ✅ healthy"
-    @echo "  • Workers should show running pods"
-    @echo "  • Latest deployment should be SUCCESS"
-    @echo ""
-    @echo "Full logs: just logs production"
+    echo ""
+    echo "📊 Recent Deployments:"
+    gcloud builds list --limit 3 --format="table(createTime.date(tz=LOCAL),substitutions.TAG_NAME,status)" 2>/dev/null || echo "  ⚠️  Cannot fetch (run: gcloud auth login)"
+    echo ""
+    echo "Summary:"
+    echo "  • Backend should show ✅ healthy"
+    echo "  • Workers should show running pods"
+    echo "  • Latest deployment should be SUCCESS"
+    echo ""
+    echo "Full logs: just logs production"
 
 # Local logs
 _logs-local service:

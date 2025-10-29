@@ -1,12 +1,10 @@
 """Backend version and build information."""
 
 import os
-import subprocess
-from datetime import datetime
 from pathlib import Path
 
 # Read version from pyproject.toml
-PYPROJECT_PATH = Path(__file__).parent.parent / "pyproject.toml"
+PYPROJECT_PATH = Path(__file__).parent.parent.parent / "pyproject.toml"
 VERSION = "0.1.0"
 
 if PYPROJECT_PATH.exists():
@@ -20,46 +18,18 @@ if PYPROJECT_PATH.exists():
         pass
 
 
-def get_git_commit() -> str | None:
-    """Get current git commit hash."""
-    try:
-        result = subprocess.run(
-            ["git", "rev-parse", "--short", "HEAD"],
-            cwd=Path(__file__).parent.parent,
-            capture_output=True,
-            text=True,
-            timeout=2,
-        )
-        if result.returncode == 0:
-            return result.stdout.strip()
-    except Exception:
-        pass
-    return None
-
-
-def get_git_commit_date() -> str | None:
-    """Get current git commit date/time."""
-    try:
-        result = subprocess.run(
-            ["git", "log", "-1", "--format=%aI"],
-            cwd=Path(__file__).parent.parent,
-            capture_output=True,
-            text=True,
-            timeout=2,
-        )
-        if result.returncode == 0:
-            return result.stdout.strip()
-    except Exception:
-        pass
-    return None
-
-
 def get_backend_info() -> dict[str, str | None]:
-    """Get backend information including version, commit, and timestamp."""
+    """Get backend information including version, git SHA, and build metadata.
+
+    Build metadata is injected at Docker build time via environment variables:
+    - GIT_SHA: Short git commit hash (e.g., "4dc7afc")
+    - BUILD_TIME: ISO timestamp when image was built
+    - ENVIRONMENT: production/development/staging
+    """
     return {
         "version": VERSION,
-        "commit": get_git_commit(),
-        "commit_date": get_git_commit_date(),
+        "git_sha": os.getenv("GIT_SHA"),
+        "built_at": os.getenv("BUILD_TIME"),
         "environment": os.getenv("ENVIRONMENT", "development"),
-        "timestamp": datetime.utcnow().isoformat() + "Z",
+        "api_version": "v1",
     }

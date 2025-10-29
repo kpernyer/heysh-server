@@ -2,18 +2,33 @@
 # This builds images and updates both Cloud Run and GKE deployments
 
 steps:
+  # Get current timestamp for build metadata
+  - name: 'gcr.io/cloud-builders/gcloud'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - 'echo $(date -u +%Y-%m-%dT%H:%M:%SZ) > /workspace/build_time.txt'
+    id: 'get-build-time'
+
   # Build all images in parallel
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
       - '-f'
       - 'docker/Dockerfile'
+      - '--build-arg'
+      - 'GIT_SHA=$SHORT_SHA'
+      - '--build-arg'
+      - 'BUILD_TIME=$(cat /workspace/build_time.txt)'
+      - '--build-arg'
+      - 'ENVIRONMENT=production'
       - '-t'
       - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:$TAG_NAME'
       - '-t'
       - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:latest'
       - '.'
     id: 'build-backend'
+    waitFor: ['get-build-time']
 
   - name: 'gcr.io/cloud-builders/docker'
     args:
