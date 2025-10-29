@@ -19,7 +19,7 @@ steps:
     args:
       - 'build'
       - '-f'
-      - 'Dockerfile'
+      - 'docker/Dockerfile.worker'
       - '-t'
       - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-worker:$TAG_NAME'
       - '-t'
