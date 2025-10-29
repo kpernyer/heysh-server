@@ -1,222 +1,197 @@
-# Hey.sh Server - Local Development Justfile
+# Hey.sh Backend - Daily Workflow
+#
+# Philosophy:
+# - Capture the 5-10 most important daily tasks
+# - Local tools: bootstrap once, verify, forget
+# - Production CI/CD: repeatable setup, never lose control
+# - Code stays the same: local ↔ production (smart config)
+# - Focus on backend code: workflows, activities
+# - Everything else should "just work"
 
 # =============================================================================
-# SETUP COMMANDS
+# 🎯 DAILY TASKS (Your Real Work)
 # =============================================================================
 
-# Install dependencies
-install:
-    @echo "📦 Installing dependencies..."
-    @uv sync
-    @echo "✅ Dependencies installed"
+# Default: Show what you can do
+default:
+    @just --list --unsorted
 
-# Build the project
-build:
-    @echo "🔨 Building project..."
-    @uv build
-    @echo "✅ Project built"
-
-# =============================================================================
-# LOCAL DEVELOPMENT COMMANDS
-# =============================================================================
-
-# Main development command - brings up everything you need
-dev: install build
-    @echo "🚀 Starting Hey.sh Local Development Environment"
+# Start developing (your main task: write backend code)
+dev:
+    @echo "🚀 Starting development environment..."
     @echo ""
-    @just up-infra
+    @just --quiet _check-infra-status
     @echo ""
-    @just verify
+    @echo "✅ Infrastructure ready. Starting backend with hot reload..."
     @echo ""
-    @echo "✅ Development environment ready!"
-    @echo "🌐 Frontend: http://hey.local"
-    @echo "🔧 API Server: http://api.hey.local (with hot reload)"
-    @echo "⏰ Temporal UI: http://temporal.hey.local"
-    @echo "🔗 Neo4j Browser: http://neo4j.hey.local"
-    @echo "🔍 Weaviate: http://weaviate.hey.local"
-    @echo "🗄️ Database: http://db.hey.local"
-    @echo "🔴 Redis: http://redis.hey.local"
-    @echo "📦 MinIO: http://supabase.hey.local"
+    @echo "🌐 Frontend:    http://hey.local (or https://www.hey.local)"
+    @echo "🔧 Backend API: http://api.hey.local:8002"
+    @echo "⏰ Temporal UI: http://temporal.hey.local:8090"
+    @echo "🔗 Neo4j:      http://neo4j.hey.local:7474"
+    @echo "🔍 Weaviate:   http://weaviate.hey.local:8082"
     @echo ""
-    @echo "Starting API server with hot reload..."
-    @uv run uvicorn src.service.api:app --reload --host 0.0.0.0 --port 8002
-
-# HTTPS development command - brings up everything with HTTPS
-dev-https: install build
-    @echo "🔐 Starting Hey.sh HTTPS Local Development Environment"
+    @echo "💡 Your focus: src/workflow/ and src/activity/"
     @echo ""
-    @just up-infra
+    uv run uvicorn src.service.api:app --reload --host 0.0.0.0 --port 8002
+
+# Demo mode (stable, clean environment for showing features)
+demo:
+    @echo "🎬 Starting DEMO mode..."
     @echo ""
-    @just verify
+    @just --quiet _check-infra-status
     @echo ""
-    @echo "✅ HTTPS Development environment ready!"
-    @echo "🌐 Frontend: https://www.hey.local"
-    @echo "🔧 API Server: https://api.hey.local (with hot reload)"
-    @echo "⏰ Temporal UI: https://temporal.hey.local"
-    @echo "🔗 Neo4j Browser: https://neo4j.hey.local"
-    @echo "🔍 Weaviate: https://weaviate.hey.local"
-    @echo "🗄️ Database: https://db.hey.local"
-    @echo "🔴 Redis: https://redis.hey.local"
-    @echo "📦 MinIO: https://supabase.hey.local"
+    @echo "✨ Demo environment ready!"
     @echo ""
-    @echo "Starting API server with hot reload..."
-    @uv run uvicorn src.service.api:app --reload --host 0.0.0.0 --port 8002
-
-# Bring up infrastructure services (Temporal, Neo4j, Weaviate, etc.)
-up-infra:
-    @echo "🐳 Starting infrastructure services..."
-    @docker-compose -f docker/docker-compose.yml up -d
-    @echo "⏳ Waiting for services to be ready..."
-    @sleep 10
-    @echo "✅ Infrastructure services started"
-
-# Verify all services are running
-verify:
-    @echo "🔍 Verifying services..."
+    @echo "🌐 Show this to stakeholders:"
+    @echo "   Frontend:  https://www.hey.local"
+    @echo "   API:       https://api.hey.local"
     @echo ""
-    @echo "📊 Service Status:"
-    @echo "=================="
-    @if curl -s http://localhost:8002/health >/dev/null 2>&1; then \
-        echo "✅ API Server: http://localhost:8002"; \
-    else \
-        echo "❌ API Server: Not running"; \
-    fi
-    @if nc -z localhost 7233 2>/dev/null; then \
-        echo "✅ Temporal: localhost:7233 (gRPC)"; \
-    else \
-        echo "❌ Temporal: Not running"; \
-    fi
-    @if curl -s http://localhost:7474 >/dev/null 2>&1; then \
-        echo "✅ Neo4j: http://localhost:7474"; \
-    else \
-        echo "❌ Neo4j: Not running"; \
-    fi
-    @if curl -s http://localhost:8082 >/dev/null 2>&1; then \
-        echo "✅ Weaviate: http://localhost:8082"; \
-    else \
-        echo "❌ Weaviate: Not running"; \
-    fi
-    @if curl -s http://localhost:8090 >/dev/null 2>&1; then \
-        echo "✅ Temporal UI: http://localhost:8090"; \
-    else \
-        echo "❌ Temporal UI: Not running"; \
-    fi
-    @if curl -s http://localhost:80 >/dev/null 2>&1; then \
-        echo "✅ Caddy: http://localhost:80"; \
-    else \
-        echo "❌ Caddy: Not running"; \
-    fi
+    @echo "📊 Backend logs will be clean and quiet..."
     @echo ""
+    uv run uvicorn src.service.api:app --host 0.0.0.0 --port 8002 --log-level warning
 
-# Clean shutdown and restart
-reboot:
-    @echo "🔄 Rebooting development environment..."
-    @just clean
-    @just dev
-
-# Clean shutdown of all services
-clean:
-    @echo "🧹 Cleaning up development environment..."
-    @docker-compose -f docker/docker-compose.yml down
-    @docker-compose -f docker/docker-compose.yml down -v 2>/dev/null || true
-    @echo "✅ Cleanup complete"
-
-# =============================================================================
-# DEVELOPMENT TOOLS
-# =============================================================================
-
-# Start workers for development
-workers:
-    @echo "👷 Starting Temporal workers..."
-    @uv run python -m src.worker.multiqueue_worker
-
-# Start Caddy for production hostnames (standalone)
-caddy-prod:
-    @echo "🌐 Starting Caddy for production hostnames..."
-    @caddy run --config docker/Caddyfile.production
-
-# Start Caddy with HTTPS for local development
-caddy-https:
-    @echo "🔐 Starting Caddy with HTTPS for local development..."
-    @caddy run --config docker/Caddyfile.https
-
-# Bootstrap installation of all external dependencies
-bootstrap:
-    @echo "🚀 Bootstrapping Hey.sh development environment..."
-    @./script/bootstrap-install.sh
-
-# Setup SSL certificates for local development
-setup-ssl:
-    @echo "🔐 Setting up SSL certificates for local development..."
-    @if ! command -v mkcert >/dev/null 2>&1; then \
-        echo "❌ mkcert is not installed. Please run 'just bootstrap' first"; \
+# Deploy to production (ship to customers)
+deploy version message="Release {{version}}":
+    @echo "🚀 Deploying to production: {{version}}"
+    @echo "📝 {{message}}"
+    @echo ""
+    @if git diff --quiet && git diff --cached --quiet; then \
+        echo "❌ No changes to commit"; \
         exit 1; \
     fi
-    @echo "📜 Installing CA certificate..."
-    @mkcert -install
-    @echo "🔑 Generating certificates for hey.local domains..."
-    @mkcert hey.local www.hey.local api.hey.local temporal.hey.local neo4j.hey.local weaviate.hey.local db.hey.local redis.hey.local minio.hey.local supabase.hey.local monitoring.hey.local grafana.hey.local alertmanager.hey.local jaeger.hey.local loki.hey.local
-    @echo "✅ SSL certificates generated!"
-    @echo "🔐 Certificates are in: hey.local+13.pem and hey.local+13-key.pem"
-    @echo "📝 Add these to your Caddyfile.https if needed"
+    @git add -A
+    @git commit -m "{{message}}"
+    @git tag -a {{version}} -m "{{message}}"
+    @git push origin main
+    @git push origin {{version}}
+    @echo ""
+    @echo "✅ Deployment triggered via Cloud Build"
+    @echo "📊 Monitor: just logs production"
+    @echo "🌐 Live at: https://api-blwol5d45q-ey.a.run.app"
+    @echo ""
+    @echo "☕ Deployment takes 5-10 minutes. Use 'just check production' to verify."
 
-# Start monitoring services
-monitoring:
-    @echo "📊 Starting monitoring services..."
-    @docker-compose -f docker/docker-compose.monitoring.yml up -d
-    @echo "✅ Monitoring services started!"
-    @echo "📊 Prometheus: http://monitoring.hey.local"
-    @echo "📈 Grafana: http://grafana.hey.local"
-    @echo "🚨 Alertmanager: http://alertmanager.hey.local"
-    @echo "🔍 Jaeger: http://jaeger.hey.local"
-    @echo "📝 Loki: http://loki.hey.local"
+# Quick deploy (auto-version, for hotfixes)
+deploy-quick message="Quick deploy":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    SHORT_SHA=$(git rev-parse --short HEAD)
+    VERSION="v0.0.0-${SHORT_SHA}"
+    echo "⚡ Quick deploy: ${VERSION}"
+    just deploy "${VERSION}" "{{message}}"
 
-# Stop monitoring services
-monitoring-stop:
-    @echo "📊 Stopping monitoring services..."
-    @docker-compose -f docker/docker-compose.monitoring.yml down
-    @echo "✅ Monitoring services stopped!"
+# Global health check (everything working?)
+check environment="local":
+    @echo "🔍 Global Health Check: {{environment}}"
+    @echo "========================================"
+    @echo ""
+    @if [ "{{environment}}" = "local" ]; then \
+        just --quiet _check-local; \
+    else \
+        just --quiet _check-production; \
+    fi
 
-# =============================================================================
-# TESTING
-# =============================================================================
-
-# Run tests
+# Run tests (verify your code works)
 test:
     @echo "🧪 Running tests..."
-    @uv run pytest test/ -v
+    @uv run pytest test/ -v --tb=short
 
-# Run tests with coverage
-test-coverage:
-    @echo "🧪 Running tests with coverage..."
-    @uv run pytest test/ --cov=src --cov-report=html --cov-report=term
+# View logs (debug issues)
+logs environment="local" service="backend":
+    @if [ "{{environment}}" = "local" ]; then \
+        just --quiet _logs-local {{service}}; \
+    else \
+        just --quiet _logs-production {{service}}; \
+    fi
 
-# Run API endpoint tests
-test-api:
-    @echo "🧪 Running API endpoint tests..."
-    @uv run pytest test/test_api_endpoints.py -v
-
-# Run user endpoint tests
-test-users:
-    @echo "🧪 Running user endpoint tests..."
-    @uv run pytest test/test_user_endpoints.py -v
-
-# Run membership endpoint tests
-test-membership:
-    @echo "🧪 Running membership endpoint tests..."
-    @uv run pytest test/test_membership_endpoints.py -v
-
-# Run comprehensive test suite
-test-all:
-    @echo "🧪 Running comprehensive test suite..."
-    @uv run python test/run_tests.py
+# Learn from production (metrics, behavior, usage)
+learn:
+    @echo "📊 Production Insights"
+    @echo "======================"
+    @echo ""
+    @echo "Backend Health:"
+    @curl -s https://api-blwol5d45q-ey.a.run.app/health | jq '.'
+    @echo ""
+    @echo "Recent Deployments:"
+    @gcloud builds list --limit 3 --format="table(createTime.date(tz=LOCAL),substitutions.TAG_NAME,status)"
+    @echo ""
+    @echo "Cloud Run Metrics:"
+    @gcloud run services describe api --region=europe-west3 --format="table(status.traffic[0].revisionName,status.traffic[0].percent,status.conditions[0].status)"
+    @echo ""
+    @echo "Worker Pods:"
+    @kubectl get pods -n temporal-workers --no-headers 2>/dev/null | wc -l | xargs -I {} echo "  {} pods running"
+    @echo ""
+    @echo "🔗 Full metrics: https://console.cloud.google.com/run/detail/europe-west3/api"
 
 # =============================================================================
-# CODE QUALITY
+# 🔧 SETUP & MAINTENANCE (Run once, forget)
 # =============================================================================
+
+# Bootstrap everything (local environment)
+bootstrap:
+    @echo "🚀 Bootstrapping local environment..."
+    @echo ""
+    @echo "This will install:"
+    @echo "  • Docker & Docker Compose"
+    @echo "  • uv (Python package manager)"
+    @echo "  • mkcert (local HTTPS)"
+    @echo "  • Infrastructure services"
+    @echo ""
+    @./script/bootstrap-install.sh
+    @echo ""
+    @echo "Installing Python dependencies..."
+    @uv sync
+    @echo ""
+    @echo "Starting infrastructure services..."
+    @docker-compose -f docker/docker-compose.yml up -d
+    @echo ""
+    @echo "Waiting for services to be ready..."
+    @sleep 15
+    @echo ""
+    @echo "✅ Bootstrap complete!"
+    @echo ""
+    @echo "Next steps:"
+    @echo "  1. Run: just check"
+    @echo "  2. Run: just dev"
+
+# Bootstrap production CI/CD (repeatable setup)
+bootstrap-production:
+    @echo "☁️  Bootstrapping production CI/CD"
+    @echo "===================================="
+    @echo ""
+    @echo "This documents and verifies your production setup."
+    @echo "Run this to ensure CI/CD is configured correctly."
+    @echo ""
+    @just --quiet _bootstrap-production-check
+
+# Fix broken infrastructure (when things go wrong)
+fix:
+    @echo "🔧 Fixing infrastructure..."
+    @echo ""
+    @echo "Stopping all services..."
+    @docker-compose -f docker/docker-compose.yml down -v 2>/dev/null || true
+    @echo "Removing stale containers..."
+    @docker system prune -f
+    @echo "Restarting services..."
+    @docker-compose -f docker/docker-compose.yml up -d
+    @echo "Waiting for services..."
+    @sleep 15
+    @echo ""
+    @echo "✅ Infrastructure reset"
+    @echo ""
+    @echo "Run: just check"
+
+# =============================================================================
+# 🧰 UTILITIES (Helpers)
+# =============================================================================
+
+# Quick test (just API endpoints)
+test-quick:
+    @echo "⚡ Quick API test..."
+    @uv run pytest test/test_topic_api_endpoints.py -v --tb=line
 
 # Format code
-format:
+fmt:
     @echo "🎨 Formatting code..."
     @uv run ruff format src/ test/
 
@@ -225,66 +200,241 @@ lint:
     @echo "🔍 Linting code..."
     @uv run ruff check src/ test/
 
-# Type check
-type-check:
-    @echo "🔍 Type checking..."
-    @uv run mypy src/
+# Clean everything (nuclear option)
+clean:
+    @echo "🧹 Cleaning everything..."
+    @docker-compose -f docker/docker-compose.yml down -v 2>/dev/null || true
+    @docker system prune -af
+    @rm -rf .pytest_cache __pycache__ .ruff_cache
+    @echo "✅ Cleaned"
+
+# Database migration (when schema changes)
+migrate-db:
+    @echo "🗄️  Running database migration..."
+    @echo ""
+    @echo "⚠️  This will rename domains → topics in Supabase"
+    @echo ""
+    @echo "Please run this SQL in Supabase Dashboard:"
+    @echo "  1. Go to: https://supabase.com/dashboard"
+    @echo "  2. SQL Editor → New Query"
+    @echo "  3. Copy: migrations/001_rename_domain_to_topic_up.sql"
+    @echo "  4. Run it"
+    @echo ""
+    @echo "Then verify with: just check production"
+
+# Start workers (for testing workflows locally)
+workers:
+    @echo "👷 Starting Temporal workers..."
+    @uv run python -m src.worker.multiqueue_worker
 
 # =============================================================================
-# UTILITIES
+# 🔒 INTERNAL HELPERS (Don't call directly)
 # =============================================================================
 
-# Show service status
-status:
-    @just verify
+# Check local infrastructure status
+_check-infra-status:
+    @if ! docker ps >/dev/null 2>&1; then \
+        echo "❌ Docker is not running"; \
+        echo "   Run: open -a Docker (or start Docker Desktop)"; \
+        exit 1; \
+    fi
+    @if ! docker-compose -f docker/docker-compose.yml ps | grep -q "Up"; then \
+        echo "🐳 Infrastructure not running. Starting..."; \
+        docker-compose -f docker/docker-compose.yml up -d; \
+        echo "⏳ Waiting for services..."; \
+        sleep 15; \
+    fi
+    @echo "✅ Infrastructure is running"
 
-# Show logs
-logs:
-    @echo "📋 Showing service logs..."
-    @docker-compose -f docker/docker-compose.yml logs -f
+# Local health check
+_check-local:
+    @echo "📦 Docker:"
+    @if docker ps >/dev/null 2>&1; then \
+        echo "  ✅ Docker is running"; \
+        docker ps --format "table {{.Names}}\t{{.Status}}" | grep -E "(temporal|neo4j|weaviate|postgres|redis)" || echo "  ⚠️  No services running"; \
+    else \
+        echo "  ❌ Docker is not running"; \
+        echo "     Run: just bootstrap"; \
+    fi
+    @echo ""
+    @echo "🔧 Backend API:"
+    @if curl -s http://localhost:8002/health >/dev/null 2>&1; then \
+        echo "  ✅ http://localhost:8002 - $(curl -s http://localhost:8002/health | jq -r .status)"; \
+    else \
+        echo "  ⚠️  Not running. Start with: just dev"; \
+    fi
+    @echo ""
+    @echo "⏰ Temporal:"
+    @if nc -z localhost 7233 2>/dev/null; then \
+        echo "  ✅ localhost:7233 (gRPC) - Running"; \
+        if curl -s http://localhost:8090 >/dev/null 2>&1; then \
+            echo "  ✅ http://localhost:8090 (UI) - Running"; \
+        fi; \
+    else \
+        echo "  ❌ Not running"; \
+        echo "     Run: just fix"; \
+    fi
+    @echo ""
+    @echo "🔗 Neo4j:"
+    @if curl -s http://localhost:7474 >/dev/null 2>&1; then \
+        echo "  ✅ http://localhost:7474 - Running"; \
+    else \
+        echo "  ❌ Not running"; \
+        echo "     Run: just fix"; \
+    fi
+    @echo ""
+    @echo "🔍 Weaviate:"
+    @if curl -s http://localhost:8082/v1/.well-known/ready >/dev/null 2>&1; then \
+        echo "  ✅ http://localhost:8082 - Ready"; \
+    else \
+        echo "  ❌ Not running"; \
+        echo "     Run: just fix"; \
+    fi
+    @echo ""
+    @echo "🗄️  Database:"
+    @if nc -z localhost 54322 2>/dev/null; then \
+        echo "  ✅ localhost:54322 - Running"; \
+    else \
+        echo "  ⚠️  Not running (using remote Supabase)"; \
+    fi
+    @echo ""
+    @echo "Summary:"
+    @echo "  • All services should show ✅"
+    @echo "  • If ❌ appears, run: just fix"
+    @echo "  • If still broken, run: just bootstrap"
 
-# Show help
-help:
-    @echo "Hey.sh Server - Local Development Commands"
+# Production health check
+_check-production:
+    @echo "🌐 Backend API (Cloud Run):"
+    @if curl -s https://api-blwol5d45q-ey.a.run.app/health >/dev/null 2>&1; then \
+        HEALTH=$$(curl -s https://api-blwol5d45q-ey.a.run.app/health | jq -r .status); \
+        echo "  ✅ https://api-blwol5d45q-ey.a.run.app - $$HEALTH"; \
+        curl -s https://api-blwol5d45q-ey.a.run.app/api/v1/topics 2>&1 | grep -q "Missing authorization" && echo "  ✅ /api/v1/topics - Requires auth (working)"; \
+    else \
+        echo "  ❌ Backend not responding"; \
+        echo "     Check: gcloud run services describe api --region=europe-west3"; \
+    fi
     @echo ""
-    @echo "🔧 Setup:"
-    @echo "  bootstrap             - Install all external dependencies (Docker, mkcert, just, uv, etc.)"
-    @echo "  install               - Install Python dependencies"
-    @echo "  build                 - Build the project"
+    @echo "🐳 Docker Images (Artifact Registry):"
+    @LATEST=$$(gcloud artifacts docker tags list europe-west3-docker.pkg.dev/hey-sh-production/hey-sh-backend/service --limit=1 --format="value(tag)" 2>/dev/null | head -1); \
+    if [ -n "$$LATEST" ]; then \
+        echo "  ✅ Latest image: $$LATEST"; \
+    else \
+        echo "  ❌ No images found"; \
+    fi
     @echo ""
-    @echo "🚀 Development:"
-    @echo "  dev                    - Start full development environment (HTTP)"
-    @echo "  dev-https              - Start full development environment (HTTPS)"
-    @echo "  up-infra              - Start infrastructure services only"
-    @echo "  verify                - Check if all services are running"
-    @echo "  reboot                - Clean restart everything"
-    @echo "  clean                 - Stop and clean up all services"
+    @echo "👷 Workers (GKE):"
+    @PODS=$$(kubectl get pods -n temporal-workers --no-headers 2>/dev/null | wc -l | tr -d ' '); \
+    if [ "$$PODS" -gt 0 ]; then \
+        echo "  ✅ $$PODS pods running"; \
+        kubectl get pods -n temporal-workers --no-headers 2>/dev/null | awk '{print "     " $$1 " - " $$3}'; \
+    else \
+        echo "  ⚠️  No worker pods found"; \
+        echo "     Check: kubectl get pods -n temporal-workers"; \
+    fi
     @echo ""
-    @echo "🔧 Development Tools:"
-    @echo "  bootstrap             - Install all external dependencies (Docker, mkcert, just, uv, etc.)"
-    @echo "  workers               - Start Temporal workers"
-    @echo "  caddy-prod            - Start Caddy for production hostnames"
-    @echo "  caddy-https            - Start Caddy with HTTPS for local development"
-    @echo "  setup-ssl             - Setup SSL certificates for local development"
+    @echo "📊 Recent Deployments:"
+    @gcloud builds list --limit 3 --format="table(createTime.date(tz=LOCAL),substitutions.TAG_NAME,status)" 2>/dev/null || echo "  ⚠️  Cannot fetch (run: gcloud auth login)"
     @echo ""
-    @echo "📊 Monitoring:"
-    @echo "  monitoring            - Start monitoring services"
-    @echo "  monitoring-stop       - Stop monitoring services"
+    @echo "Summary:"
+    @echo "  • Backend should show ✅ healthy"
+    @echo "  • Workers should show running pods"
+    @echo "  • Latest deployment should be SUCCESS"
     @echo ""
-    @echo "🧪 Testing:"
-    @echo "  test                  - Run tests"
-    @echo "  test-coverage         - Run tests with coverage"
-    @echo "  test-api              - Run API endpoint tests"
-    @echo "  test-users            - Run user endpoint tests"
-    @echo "  test-membership       - Run membership endpoint tests"
-    @echo "  test-all              - Run comprehensive test suite"
+    @echo "Full logs: just logs production"
+
+# Local logs
+_logs-local service:
+    @if [ "{{service}}" = "backend" ]; then \
+        echo "📋 Backend logs (Ctrl+C to stop):"; \
+        echo "   Start backend with: just dev"; \
+    elif [ "{{service}}" = "temporal" ]; then \
+        echo "📋 Temporal logs:"; \
+        docker logs -f $$(docker ps -q -f name=temporal) 2>/dev/null || echo "Temporal not running"; \
+    elif [ "{{service}}" = "neo4j" ]; then \
+        echo "📋 Neo4j logs:"; \
+        docker logs -f $$(docker ps -q -f name=neo4j) 2>/dev/null || echo "Neo4j not running"; \
+    else \
+        echo "📋 All services logs:"; \
+        docker-compose -f docker/docker-compose.yml logs -f; \
+    fi
+
+# Production logs
+_logs-production service:
+    @if [ "{{service}}" = "backend" ]; then \
+        echo "📋 Backend logs (Cloud Run):"; \
+        gcloud run logs read api --region=europe-west3 --limit=50; \
+    elif [ "{{service}}" = "workers" ]; then \
+        echo "📋 Worker logs (GKE):"; \
+        kubectl logs -n temporal-workers -l app=temporal-worker --tail=50 -f; \
+    elif [ "{{service}}" = "builds" ]; then \
+        echo "📋 Cloud Build logs:"; \
+        BUILD_ID=$$(gcloud builds list --limit=1 --format="value(id)"); \
+        gcloud builds log $$BUILD_ID; \
+    else \
+        echo "Available services: backend, workers, builds"; \
+        echo "Example: just logs production backend"; \
+    fi
+
+# Check production CI/CD setup
+_bootstrap-production-check:
+    @echo "1️⃣  GCP Project:"
+    @PROJECT=$$(gcloud config get-value project 2>/dev/null); \
+    if [ -n "$$PROJECT" ]; then \
+        echo "  ✅ Project: $$PROJECT"; \
+    else \
+        echo "  ❌ No project configured"; \
+        echo "     Run: gcloud config set project YOUR_PROJECT_ID"; \
+        exit 1; \
+    fi
     @echo ""
-    @echo "🎨 Code Quality:"
-    @echo "  format                - Format code"
-    @echo "  lint                  - Lint code"
-    @echo "  type-check            - Type check code"
+    @echo "2️⃣  Cloud Build Triggers:"
+    @TRIGGERS=$$(gcloud builds triggers list --format="value(name)" 2>/dev/null | wc -l); \
+    if [ $$TRIGGERS -gt 0 ]; then \
+        echo "  ✅ $$TRIGGERS triggers configured:"; \
+        gcloud builds triggers list --format="table(name,filename,triggerTemplate.tagName)" 2>/dev/null || true; \
+    else \
+        echo "  ❌ No triggers found"; \
+        echo "     Setup guide: docs/PRODUCTION_BOOTSTRAP.md"; \
+    fi
     @echo ""
-    @echo "📊 Utilities:"
-    @echo "  status                - Show service status"
-    @echo "  logs                  - Show service logs"
-    @echo "  help                  - Show this help"
+    @echo "3️⃣  Artifact Registry:"
+    @if gcloud artifacts repositories describe hey-sh-backend --location=europe-west3 >/dev/null 2>&1; then \
+        echo "  ✅ Repository: hey-sh-backend"; \
+    else \
+        echo "  ❌ Repository not found"; \
+        echo "     Create: gcloud artifacts repositories create hey-sh-backend --repository-format=docker --location=europe-west3"; \
+    fi
+    @echo ""
+    @echo "4️⃣  Cloud Run Service:"
+    @if gcloud run services describe api --region=europe-west3 >/dev/null 2>&1; then \
+        echo "  ✅ Service: api"; \
+        URL=$$(gcloud run services describe api --region=europe-west3 --format="value(status.url)" 2>/dev/null); \
+        echo "     URL: $$URL"; \
+    else \
+        echo "  ❌ Service not found"; \
+    fi
+    @echo ""
+    @echo "5️⃣  GKE Cluster:"
+    @if gcloud container clusters describe production-hey-sh-cluster --region=europe-west3 >/dev/null 2>&1; then \
+        echo "  ✅ Cluster: production-hey-sh-cluster"; \
+    else \
+        echo "  ❌ Cluster not found"; \
+        echo "     Check: infra/terraform/"; \
+    fi
+    @echo ""
+    @echo "6️⃣  Secrets (Secret Manager):"
+    @SECRETS=$$(gcloud secrets list --format="value(name)" 2>/dev/null | wc -l); \
+    if [ $$SECRETS -gt 0 ]; then \
+        echo "  ✅ $$SECRETS secrets configured"; \
+    else \
+        echo "  ⚠️  No secrets found"; \
+    fi
+    @echo ""
+    @echo "📖 Documentation:"
+    @echo "   • cloudbuild_deploy.yaml - Main deployment pipeline"
+    @echo "   • infra/terraform/ - Infrastructure as code"
+    @echo "   • DEPLOYMENT_WORKFLOW.md - Complete guide"
+    @echo ""
+    @echo "✅ If all show ✅, your CI/CD is configured correctly"
+    @echo "❌ If any show ❌, see docs/PRODUCTION_BOOTSTRAP.md for setup"
