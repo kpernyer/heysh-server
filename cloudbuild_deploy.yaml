@@ -51,6 +51,27 @@ steps:
       - '.'
     id: 'build-storage-worker'
 
+  # Push all images to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '--all-tags', '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service']
+    id: 'push-backend'
+    waitFor: ['build-backend']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '--all-tags', '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-worker']
+    id: 'push-general-worker'
+    waitFor: ['build-general-worker']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '--all-tags', '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-ai-worker']
+    id: 'push-ai-worker'
+    waitFor: ['build-ai-worker']
+
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '--all-tags', '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-storage-worker']
+    id: 'push-storage-worker'
+    waitFor: ['build-storage-worker']
+
   # Deploy backend to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'gcloud'
@@ -63,7 +84,7 @@ steps:
       - '--region=${_REGION}'
       - '--project=$PROJECT_ID'
     id: 'deploy-backend'
-    waitFor: ['build-backend']
+    waitFor: ['push-backend']
 
   # Deploy workers via Helm (requires GKE cluster)
   - name: 'gcr.io/$PROJECT_ID/helm'  # You'll need to build a custom helm builder
@@ -82,7 +103,7 @@ steps:
           --set image.tag=$TAG_NAME \
           --wait
     id: 'deploy-workers'
-    waitFor: ['build-general-worker', 'build-ai-worker', 'build-storage-worker']
+    waitFor: ['push-general-worker', 'push-ai-worker', 'push-storage-worker']
 
 images:
   - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:$TAG_NAME'
