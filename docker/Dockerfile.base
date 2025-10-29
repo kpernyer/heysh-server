@@ -1,0 +1,37 @@
+# Base image with all Python dependencies pre-installed
+# Build this separately and push to registry
+# Only rebuild when requirements.txt changes
+
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PIP_NO_CACHE_DIR=1
+ENV PIP_DISABLE_PIP_VERSION_CHECK=1
+
+# Install system dependencies (these rarely change)
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv
+RUN pip install uv
+
+WORKDIR /app
+
+# Copy and install Python dependencies
+# This is the expensive part we want to cache
+COPY requirements.txt pyproject.toml ./
+
+# Install all Python dependencies into system
+RUN uv pip install --system -r requirements.txt
+
+# Verify installation
+RUN python -c "import fastapi; import uvicorn; import temporalio; print('✅ All dependencies installed')"
+
+# This image is now ready to have code added
+# Size: ~1GB, Build time: ~3 minutes
+# But we only build it once!

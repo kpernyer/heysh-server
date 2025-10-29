@@ -1,5 +1,5 @@
 # Full deployment pipeline triggered by git tags (v*)
-# This builds images and updates both Cloud Run and GKE deployments
+# Optimized with Docker layer caching and conditional worker builds
 
 steps:
   # Get current timestamp for build metadata
@@ -10,61 +10,144 @@ steps:
       - 'echo $(date -u +%Y-%m-%dT%H:%M:%SZ) > /workspace/build_time.txt'
     id: 'get-build-time'
 
-  # Build all images in parallel
+  # Pull existing images for cache (fail silently if doesn't exist)
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - 'docker pull ${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:latest || exit 0'
+    id: 'pull-backend-cache'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - 'docker pull ${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-worker:latest || exit 0'
+    id: 'pull-worker-cache'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - 'docker pull ${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-ai-worker:latest || exit 0'
+    id: 'pull-ai-cache'
+
+  - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - 'docker pull ${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-storage-worker:latest || exit 0'
+    id: 'pull-storage-cache'
+
+  # Check which files changed to conditionally build workers
+  - name: 'gcr.io/cloud-builders/git'
+    entrypoint: 'bash'
+    args:
+      - '-c'
+      - |
+        # Check if deployment files changed since last tag
+        LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        if [ -z "$LAST_TAG" ]; then
+          echo "true" > /workspace/build_workers.txt
+        else
+          if git diff --name-only $LAST_TAG HEAD | grep -qE '^(deployments/|src/workflows/)'; then
+            echo "true" > /workspace/build_workers.txt
+          else
+            echo "false" > /workspace/build_workers.txt
+          fi
+        fi
+        cat /workspace/build_workers.txt
+    id: 'check-worker-changes'
+    waitFor: ['-']
+
+  # Build backend (always) with cache
   - name: 'gcr.io/cloud-builders/docker'
     args:
       - 'build'
       - '-f'
       - 'docker/Dockerfile'
+      - '--cache-from'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:latest'
       - '--build-arg'
       - 'GIT_SHA=$SHORT_SHA'
       - '--build-arg'
       - 'BUILD_TIME=$(cat /workspace/build_time.txt)'
       - '--build-arg'
       - 'ENVIRONMENT=production'
+      - '--build-arg'
+      - 'BUILDKIT_INLINE_CACHE=1'
       - '-t'
       - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:$TAG_NAME'
       - '-t'
       - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:latest'
       - '.'
     id: 'build-backend'
-    waitFor: ['get-build-time']
+    waitFor: ['get-build-time', 'pull-backend-cache']
 
+  # Build workers (conditionally) with cache
   - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
     args:
-      - 'build'
-      - '-f'
-      - 'deployments/Dockerfile'
-      - '-t'
-      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-worker:$TAG_NAME'
-      - '-t'
-      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-worker:latest'
-      - '.'
+      - '-c'
+      - |
+        if [ "$(cat /workspace/build_workers.txt)" = "true" ]; then
+          docker build \
+            -f deployments/Dockerfile \
+            --cache-from ${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-worker:latest \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-worker:$TAG_NAME \
+            -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-worker:latest \
+            .
+        else
+          echo "⏭️  Skipping worker build - no changes in deployments/"
+          # Tag existing latest as this version
+          docker tag ${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-worker:latest \
+                     ${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-worker:$TAG_NAME
+        fi
     id: 'build-general-worker'
+    waitFor: ['check-worker-changes', 'pull-worker-cache']
 
   - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
     args:
-      - 'build'
-      - '-f'
-      - 'deployments/Dockerfile.ai-worker'
-      - '-t'
-      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-ai-worker:$TAG_NAME'
-      - '-t'
-      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-ai-worker:latest'
-      - '.'
+      - '-c'
+      - |
+        if [ "$(cat /workspace/build_workers.txt)" = "true" ]; then
+          docker build \
+            -f deployments/Dockerfile.ai-worker \
+            --cache-from ${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-ai-worker:latest \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-ai-worker:$TAG_NAME \
+            -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-ai-worker:latest \
+            .
+        else
+          echo "⏭️  Skipping AI worker build - no changes in deployments/"
+          docker tag ${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-ai-worker:latest \
+                     ${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-ai-worker:$TAG_NAME
+        fi
     id: 'build-ai-worker'
+    waitFor: ['check-worker-changes', 'pull-ai-cache']
 
   - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
     args:
-      - 'build'
-      - '-f'
-      - 'deployments/Dockerfile.storage-worker'
-      - '-t'
-      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-storage-worker:$TAG_NAME'
-      - '-t'
-      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-storage-worker:latest'
-      - '.'
+      - '-c'
+      - |
+        if [ "$(cat /workspace/build_workers.txt)" = "true" ]; then
+          docker build \
+            -f deployments/Dockerfile.storage-worker \
+            --cache-from ${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-storage-worker:latest \
+            --build-arg BUILDKIT_INLINE_CACHE=1 \
+            -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-storage-worker:$TAG_NAME \
+            -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-storage-worker:latest \
+            .
+        else
+          echo "⏭️  Skipping storage worker build - no changes in deployments/"
+          docker tag ${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-storage-worker:latest \
+                     ${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/hey-sh-storage-worker:$TAG_NAME
+        fi
     id: 'build-storage-worker'
+    waitFor: ['check-worker-changes', 'pull-storage-cache']
 
   # Push all images to Artifact Registry
   - name: 'gcr.io/cloud-builders/docker'
@@ -102,23 +185,25 @@ steps:
     waitFor: ['push-backend']
 
   # Deploy workers via Helm (requires GKE cluster)
-  - name: 'gcr.io/$PROJECT_ID/helm'  # You'll need to build a custom helm builder
-    entrypoint: 'bash'
-    args:
-      - '-c'
-      - |
-        gcloud container clusters get-credentials ${_DEPLOY_ENV}-hey-sh-cluster --region=${_REGION} --project=$PROJECT_ID
-        helm upgrade --install temporal-workers ./infra/helm/temporal-workers \
-          --namespace temporal-workers \
-          --create-namespace \
-          --set global.projectId=$PROJECT_ID \
-          --set global.region=${_REGION} \
-          --set global.environment=${_DEPLOY_ENV} \
-          --set image.repository=$PROJECT_ID/hey-sh-backend \
-          --set image.tag=$TAG_NAME \
-          --wait
-    id: 'deploy-workers'
-    waitFor: ['push-general-worker', 'push-ai-worker', 'push-storage-worker']
+  # DISABLED: GKE cluster and Helm image not set up yet
+  # Uncomment when ready to deploy workers
+  # - name: 'gcr.io/$PROJECT_ID/helm'
+  #   entrypoint: 'bash'
+  #   args:
+  #     - '-c'
+  #     - |
+  #       gcloud container clusters get-credentials ${_DEPLOY_ENV}-hey-sh-cluster --region=${_REGION} --project=$PROJECT_ID
+  #       helm upgrade --install temporal-workers ./infra/helm/temporal-workers \
+  #         --namespace temporal-workers \
+  #         --create-namespace \
+  #         --set global.projectId=$PROJECT_ID \
+  #         --set global.region=${_REGION} \
+  #         --set global.environment=${_DEPLOY_ENV} \
+  #         --set image.repository=$PROJECT_ID/hey-sh-backend \
+  #         --set image.tag=$TAG_NAME \
+  #         --wait
+  #   id: 'deploy-workers'
+  #   waitFor: ['push-general-worker', 'push-ai-worker', 'push-storage-worker']
 
 images:
   - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:$TAG_NAME'

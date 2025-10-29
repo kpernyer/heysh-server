@@ -1,11 +1,8 @@
 # Hey.sh Server - Python Backend Dockerfile
+# Multi-stage build for optimal layer caching
 
-FROM python:3.11-slim
-
-# Build arguments for version tracking
-ARG GIT_SHA
-ARG BUILD_TIME
-ARG ENVIRONMENT=production
+# Stage 1: Dependencies (cached separately)
+FROM python:3.11-slim AS dependencies
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
@@ -13,30 +10,37 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PIP_NO_CACHE_DIR=1
 ENV PIP_DISABLE_PIP_VERSION_CHECK=1
 
-# Set build metadata as environment variables
-ENV GIT_SHA=${GIT_SHA}
-ENV BUILD_TIME=${BUILD_TIME}
-ENV ENVIRONMENT=${ENVIRONMENT}
-
-# Install system dependencies
+# Install system dependencies (rarely changes)
 RUN apt-get update && apt-get install -y \
     build-essential \
     curl \
     && rm -rf /var/lib/apt/lists/*
 
-# Install uv
+# Install uv (rarely changes)
 RUN pip install uv
 
-# Set work directory
 WORKDIR /app
 
-# Copy requirements first for better caching
+# Copy only dependency files (changes less often than code)
 COPY requirements.txt pyproject.toml ./
 
-# Install Python dependencies
+# Install Python dependencies (this layer gets cached)
 RUN uv pip install --system -r requirements.txt
 
-# Copy application code
+# Stage 2: Application
+FROM dependencies AS base
+
+# Build arguments for version tracking
+ARG GIT_SHA
+ARG BUILD_TIME
+ARG ENVIRONMENT=production
+
+# Set build metadata as environment variables
+ENV GIT_SHA=${GIT_SHA}
+ENV BUILD_TIME=${BUILD_TIME}
+ENV ENVIRONMENT=${ENVIRONMENT}
+
+# Copy application code (changes frequently, but built on cached deps)
 COPY . .
 
 # Create non-root user

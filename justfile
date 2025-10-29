@@ -114,6 +114,17 @@ deploy-quick message="Quick deploy":
     echo "⚡ Quick deploy: ${VERSION}"
     just deploy "${VERSION}" "{{message}}"
 
+# Rebuild base Docker image (run when requirements.txt changes)
+rebuild-base:
+    @echo "🏗️  Rebuilding Python base image with dependencies"
+    @echo "   This takes ~5 minutes but makes future deploys 6x faster!"
+    @echo ""
+    @gcloud builds submit --config cloudbuild_base.yaml .
+    @echo ""
+    @echo "✅ Base image rebuilt"
+    @echo "📦 Next deployments will use cached dependencies"
+    @echo "⚡ Expected deploy time: 2-4 minutes (down from 15 minutes)"
+
 # Global health check (everything working?)
 check environment="local":
     #!/usr/bin/env bash

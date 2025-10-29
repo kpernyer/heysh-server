@@ -1,0 +1,36 @@
+# Build base image with Python dependencies
+# Trigger: Manual or when requirements.txt changes
+
+steps:
+  # Build base image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'build'
+      - '-f'
+      - 'docker/Dockerfile.base'
+      - '-t'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/python-base:latest'
+      - '--build-arg'
+      - 'BUILDKIT_INLINE_CACHE=1'
+      - '.'
+    id: 'build-base'
+
+  # Push base image
+  - name: 'gcr.io/cloud-builders/docker'
+    args:
+      - 'push'
+      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/python-base:latest'
+    id: 'push-base'
+    waitFor: ['build-base']
+
+images:
+  - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/python-base:latest'
+
+substitutions:
+  _REGION: 'europe-west3'
+
+options:
+  machineType: 'E2_HIGHCPU_8'
+  logging: CLOUD_LOGGING_ONLY
+
+timeout: '1200s'  # 20 minutes for dependency installation
