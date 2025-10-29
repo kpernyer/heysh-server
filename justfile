@@ -12,9 +12,23 @@
 # 🎯 DAILY TASKS (Your Real Work)
 # =============================================================================
 
-# Default: Show what you can do
+# Default: Show project status and what to do next
 default:
-    @just --list --unsorted
+    @just status
+
+# Show full project status and daily plan
+status:
+    @echo "╔════════════════════════════════════════════════════════════════╗"
+    @echo "║              Hey.sh Backend - Project Status                  ║"
+    @echo "╚════════════════════════════════════════════════════════════════╝"
+    @echo ""
+    @just --quiet _status-git
+    @echo ""
+    @just --quiet _status-local
+    @echo ""
+    @just --quiet _status-production
+    @echo ""
+    @just --quiet _status-suggestions
 
 # Start developing (your main task: write backend code)
 dev:
@@ -251,7 +265,7 @@ _check-local:
     @echo "📦 Docker:"
     @if docker ps >/dev/null 2>&1; then \
         echo "  ✅ Docker is running"; \
-        docker ps --format "table {{.Names}}\t{{.Status}}" | grep -E "(temporal|neo4j|weaviate|postgres|redis)" || echo "  ⚠️  No services running"; \
+        docker ps --filter "name=temporal|neo4j|weaviate|postgres|redis" --format "table {{{{.Names}}}}\t{{{{.Status}}}}" 2>/dev/null || echo "  ⚠️  No services running"; \
     else \
         echo "  ❌ Docker is not running"; \
         echo "     Run: just bootstrap"; \
@@ -375,6 +389,127 @@ _logs-production service:
         echo "Available services: backend, workers, builds"; \
         echo "Example: just logs production backend"; \
     fi
+
+# Git status for daily dashboard
+_status-git:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "📝 Git Status"
+    echo "════════════════════════════════════════════════════════════════"
+    BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")
+    UNCOMMITTED=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+    UNPUSHED=$(git log @{u}.. --oneline 2>/dev/null | wc -l | tr -d ' ')
+    LAST_COMMIT=$(git log -1 --pretty=format:"%h - %s" 2>/dev/null || echo "No commits")
+    echo "  Branch: $BRANCH"
+    if [ "$UNCOMMITTED" -gt 0 ]; then
+        echo "  ⚠️  $UNCOMMITTED uncommitted changes"
+        git status --short | head -5 | sed 's/^/     /'
+        if [ "$UNCOMMITTED" -gt 5 ]; then
+            echo "     ... and $((UNCOMMITTED - 5)) more"
+        fi
+    else
+        echo "  ✅ Working directory clean"
+    fi
+    if [ "$UNPUSHED" -gt 0 ]; then
+        echo "  ⚠️  $UNPUSHED unpushed commits"
+    else
+        echo "  ✅ All commits pushed"
+    fi
+    echo "  Last commit: $LAST_COMMIT"
+    echo ""
+    echo "  Recent commits:"
+    git log --oneline --decorate -5 2>/dev/null | sed 's/^/     /' || echo "     No commits"
+
+# Local environment status for dashboard
+_status-local:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "🏠 Local Environment"
+    echo "════════════════════════════════════════════════════════════════"
+    if ! docker ps >/dev/null 2>&1; then
+        echo "  ❌ Docker not running"
+        echo "     → Run: open -a Docker"
+    else
+        CONTAINERS=$(docker ps --filter "name=temporal" --filter "name=neo4j" --filter "name=weaviate" --filter "name=postgres" --filter "name=redis" 2>/dev/null | wc -l | tr -d ' ')
+        CONTAINERS=$((CONTAINERS - 1))  # Subtract header line
+        if [ "$CONTAINERS" -gt 0 ]; then
+            echo "  ✅ Docker running ($CONTAINERS services)"
+            docker ps --filter "name=temporal" --filter "name=neo4j" --filter "name=weaviate" --filter "name=postgres" --filter "name=redis" --format "table {{{{.Names}}}}\t{{{{.Status}}}}" 2>/dev/null | tail -n +2 | sed 's/^/     /' || true
+        else
+            echo "  ⚠️  Docker running but no services"
+            echo "     → Run: just dev"
+        fi
+    fi
+    echo ""
+    if curl -s http://localhost:8002/health >/dev/null 2>&1; then
+        STATUS=$(curl -s http://localhost:8002/health | jq -r .status 2>/dev/null || echo "unknown")
+        echo "  ✅ Backend API: http://localhost:8002 ($STATUS)"
+    else
+        echo "  ⚠️  Backend API not running"
+        echo "     → Run: just dev"
+    fi
+
+# Production status for dashboard
+_status-production:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "☁️  Production Environment"
+    echo "════════════════════════════════════════════════════════════════"
+    if ! command -v gcloud >/dev/null 2>&1; then
+        echo "  ⚠️  gcloud not installed (production checks disabled)"
+        echo "     → Install: brew install google-cloud-sdk"
+    else
+        PROJECT=$(gcloud config get-value project 2>/dev/null || echo "")
+        if [ -z "$PROJECT" ]; then
+            echo "  ⚠️  No GCP project configured"
+            echo "     → Run: gcloud config set project YOUR_PROJECT_ID"
+        else
+            echo "  📊 Project: $PROJECT"
+            if curl -s https://api-blwol5d45q-ey.a.run.app/health >/dev/null 2>&1; then
+                HEALTH=$(curl -s https://api-blwol5d45q-ey.a.run.app/health | jq -r .status 2>/dev/null || echo "unknown")
+                echo "  ✅ Backend API: https://api-blwol5d45q-ey.a.run.app ($HEALTH)"
+            else
+                echo "  ❌ Backend API not responding"
+            fi
+            echo ""
+            echo "  Recent Deployments:"
+            gcloud builds list --limit 3 --format="table[no-heading](createTime.date(tz=LOCAL),substitutions.TAG_NAME,status)" 2>/dev/null | sed 's/^/     /' || echo "     Cannot fetch (not authenticated)"
+        fi
+    fi
+
+# Suggest next steps based on current state
+_status-suggestions:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "💡 Suggested Next Steps"
+    echo "════════════════════════════════════════════════════════════════"
+    UNCOMMITTED=$(git status --porcelain 2>/dev/null | wc -l | tr -d ' ')
+    BACKEND_RUNNING=$(curl -s http://localhost:8002/health >/dev/null 2>&1 && echo "yes" || echo "no")
+    DOCKER_RUNNING=$(docker ps >/dev/null 2>&1 && echo "yes" || echo "no")
+    if [ "$DOCKER_RUNNING" = "no" ]; then
+        echo "  1. Start Docker Desktop"
+        echo "  2. Run: just dev"
+    elif [ "$BACKEND_RUNNING" = "no" ]; then
+        echo "  1. Start developing: just dev"
+    elif [ "$UNCOMMITTED" -gt 0 ]; then
+        echo "  1. Continue working on your changes"
+        echo "  2. Test: just test"
+        echo "  3. Deploy when ready: just deploy v1.x.x \"Message\""
+    else
+        echo "  Choose your task:"
+        echo "    • Start coding: just dev"
+        echo "    • Demo to stakeholders: just demo"
+        echo "    • Check production health: just check production"
+        echo "    • Learn from metrics: just learn"
+    fi
+    echo ""
+    echo "  📚 Quick commands:"
+    echo "     just dev              Start developing"
+    echo "     just test             Run tests"
+    echo "     just deploy v1.x.x    Deploy to production"
+    echo "     just check            Full health check"
+    echo "     just learn            Production insights"
+    echo "     just --list           See all commands"
 
 # Check production CI/CD setup
 _bootstrap-production-check:
