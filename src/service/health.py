@@ -52,7 +52,10 @@ async def check_temporal_connection(client: Any) -> HealthStatus:
 
 
 async def check_database_connections() -> HealthStatus:
-    """Check database connections."""
+    """Check database connections using hostname-based configuration."""
+    from src.service.config import get_settings
+
+    settings = get_settings()
     issues = []
 
     # Check Neo4j
@@ -60,11 +63,8 @@ async def check_database_connections() -> HealthStatus:
         from neo4j import GraphDatabase
 
         driver = GraphDatabase.driver(
-            os.getenv("NEO4J_URI", "bolt://localhost:7687"),
-            auth=(
-                os.getenv("NEO4J_USER", "neo4j"),
-                os.getenv("NEO4J_PASSWORD", ""),
-            ),
+            settings.neo4j_uri,
+            auth=(settings.neo4j_user, settings.neo4j_password),
         )
         with driver.session() as session:
             session.run("RETURN 1")
@@ -76,7 +76,7 @@ async def check_database_connections() -> HealthStatus:
     try:
         import weaviate
 
-        client = weaviate.Client(os.getenv("WEAVIATE_URL", "http://localhost:8080"))
+        client = weaviate.Client(settings.weaviate_url)
         client.schema.get()
     except Exception as e:
         issues.append(f"Weaviate: {e!s}")

@@ -7,12 +7,10 @@ from typing import Any
 import structlog
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from strawberry.fastapi import GraphQLRouter
+from fastapi.responses import RedirectResponse
 from temporalio.client import Client
 from temporalio.contrib.pydantic import pydantic_data_converter
 
-from src.service.graphql import schema
-from src.service.graphql.resolvers import resolver
 from src.service.health import (
     run_liveness_check,
     run_readiness_check,
@@ -37,13 +35,16 @@ temporal_client: Client | None = None
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):  # type: ignore
-    """Lifespan context manager for startup/shutdown."""
+    """Lifespan context manager for startup/shutdown using hostname-based configuration."""
+    from src.service.config import get_settings
+
     global temporal_client
 
-    # Startup
-    temporal_address = os.getenv("TEMPORAL_ADDRESS", "localhost:7233")
-    temporal_namespace = os.getenv("TEMPORAL_NAMESPACE", "default")
-    temporal_api_key = os.getenv("TEMPORAL_API_KEY")
+    # Get configuration from Settings (hostname-based)
+    settings = get_settings()
+    temporal_address = settings.temporal_address
+    temporal_namespace = settings.temporal_namespace
+    temporal_api_key = settings.temporal_api_key
 
     logger.info("Connecting to Temporal", address=temporal_address, namespace=temporal_namespace)
 
@@ -72,26 +73,12 @@ async def lifespan(app: FastAPI):  # type: ignore
     # Share Temporal client with workflows router
     set_temporal_client(temporal_client)
 
-    # Initialize GraphQL resolver connections
-    try:
-        await resolver.init_connections()
-        logger.info("GraphQL resolver connections initialized")
-    except Exception as e:
-        logger.warning(f"Some GraphQL connections failed to initialize: {e}")
-        # Continue anyway - GraphQL will work with partial connections
-
     yield
 
     # Shutdown
-    if temporal_client:
-        await temporal_client.close()
-        logger.info("Temporal client closed")
-
-    try:
-        await resolver.close_connections()
-        logger.info("GraphQL resolver connections closed")
-    except Exception as e:
-        logger.warning(f"Error closing GraphQL connections: {e}")
+    # Note: Temporal client doesn't have a .close() method
+    # It will be automatically cleaned up when the app shuts down
+    logger.info("Shutting down Temporal client")
 
 
 # Create FastAPI app
@@ -102,80 +89,64 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# CORS middleware
-# Tillåter alla Lovable-projekt med regex pattern
+# CORS middleware - hostname-based configuration
+# Uses Settings.cors_origins which provides local/production URLs
+from src.service.config import get_settings
 
-cors_origins = [
-    "http://localhost:5173",  # För lokal utveckling
-    "http://localhost:3000",  # För annan lokal utveckling
-    "http://hey.local",       # Hey.sh local development
-    "http://www.hey.local",   # Hey.sh local development with www
-    # Matcher alla subdomains på lovableproject.com
-    r"https://.*\.lovableproject\.com",
-]
+settings = get_settings()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origin_regex=r"https://.*\.lovableproject\.com",  # Regex för alla Lovable-projekt
-    allow_origins=[
-        "http://localhost:5173",
-        "http://localhost:3000",
-        "http://hey.local",
-        "http://www.hey.local",
-    ],
+    allow_origin_regex=r"https://.*\.lovableproject\.com",  # Allow all Lovable projects
+    allow_origins=settings.cors_origins,  # Hostname-based: local or production
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 # Include authentication routes (no auth required for some endpoints)
-app.include_router(auth_router)
+app.include_router(auth_router, tags=["Authentication"])
 
 # Include configuration routes (no auth required)
-app.include_router(config_router)
+app.include_router(config_router, tags=["Configuration"])
 
 # Include data management routes (auth required)
-app.include_router(data_router)
+app.include_router(data_router, tags=["Documents & Topics"])
 
 # Include workflow orchestration routes (auth required)
-app.include_router(workflows_router)
+app.include_router(workflows_router, tags=["Workflows"])
 
 # Include inbox routes (auth required)
-app.include_router(inbox_router)
+app.include_router(inbox_router, tags=["Inbox"])
 
 # Include user management routes (auth required)
-app.include_router(users_router)
+app.include_router(users_router, tags=["Users"])
 
 # Include membership routes (auth required)
-app.include_router(membership_router)
+app.include_router(membership_router, tags=["Membership"])
 
 # Include WebSocket routes
-app.include_router(websocket_router)
+app.include_router(websocket_router, tags=["WebSockets"])
 
-# Create and mount GraphQL router
-graphql_app = GraphQLRouter(schema)
-app.include_router(graphql_app, prefix="/graphql")
-
-
-@app.get("/")
-async def root() -> dict[str, str]:
-    """Root endpoint."""
-    return {"message": "Hey.sh Backend API", "version": "0.1.0"}
+@app.get("/", include_in_schema=False)
+async def root():
+    """Root endpoint - redirect to API documentation."""
+    return RedirectResponse(url="/docs")
 
 
-@app.get("/health")
+@app.get("/health", tags=["Meta"], summary="Health check")
 async def health() -> dict[str, str]:
-    """Health check endpoint."""
+    """Simple health check endpoint - always returns healthy if API is responding."""
     return {"status": "healthy"}
 
 
-@app.get("/api/v1/info")
-async def get_backend_info() -> dict[str, Any]:
-    """Get backend version and environment information."""
+@app.get("/api/v1/info", tags=["Meta"], summary="API version info")
+async def info() -> dict[str, Any]:
+    """Get backend version, git commit, and build information."""
     return get_backend_info()
 
 
-@app.get("/health/live")
+@app.get("/health/live", include_in_schema=False)
 async def liveness_probe() -> dict:
     """Kubernetes liveness probe endpoint.
     Pod will be restarted if this fails.
@@ -185,7 +156,7 @@ async def liveness_probe() -> dict:
     return {"status_code": status_code, **result}
 
 
-@app.get("/health/ready")
+@app.get("/health/ready", include_in_schema=False)
 async def readiness_probe() -> dict:
     """Kubernetes readiness probe endpoint.
     Pod will be removed from load balancer if this fails.
@@ -195,7 +166,7 @@ async def readiness_probe() -> dict:
     return {"status_code": status_code, **result}
 
 
-@app.get("/health/startup")
+@app.get("/health/startup", include_in_schema=False)
 async def startup_probe() -> dict:
     """Kubernetes startup probe endpoint.
     Pod must pass this before readiness/liveness checks start.

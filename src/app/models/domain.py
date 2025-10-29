@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TopicStatus(Enum):
@@ -26,6 +26,8 @@ class TopicRole(Enum):
 
 class Topic(BaseModel):
     """Topic model for knowledge base topics."""
+
+    model_config = ConfigDict(use_enum_values=True)
 
     id: UUID = Field(default_factory=uuid4)
     name: str = Field(..., description="Topic name")
@@ -50,23 +52,17 @@ class Topic(BaseModel):
     contributor_count: int = Field(default=0, description="Number of contributors")
     last_activity: Optional[datetime] = Field(None, description="Last activity timestamp")
 
-    class Config:
-        """Pydantic configuration."""
-        use_enum_values = True
-
 
 class TopicMember(BaseModel):
     """Topic member model."""
+
+    model_config = ConfigDict(use_enum_values=True)
 
     topic_id: UUID = Field(..., description="Topic ID")
     user_id: UUID = Field(..., description="User ID")
     role: TopicRole = Field(..., description="User role in topic")
     joined_at: datetime = Field(default_factory=datetime.utcnow)
     permissions: List[str] = Field(default_factory=list, description="User permissions")
-
-    class Config:
-        """Pydantic configuration."""
-        use_enum_values = True
 
 
 class BootstrapInput(BaseModel):

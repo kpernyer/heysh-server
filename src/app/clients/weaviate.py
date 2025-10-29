@@ -23,7 +23,15 @@ class WeaviateClient:
             # Parse URL to extract host and port
             parsed = urlparse(url)
             host = parsed.hostname or "localhost"
-            port = parsed.port or 8080
+            # Use port from URL, or default based on scheme (http=80, https=443, other=8080)
+            if parsed.port:
+                port = parsed.port
+            elif parsed.scheme == "https":
+                port = 443
+            elif parsed.scheme == "http":
+                port = 80
+            else:
+                port = 8080
             self.client = weaviate.connect_to_local(
                 host=host, port=port, skip_init_checks=True
             )
@@ -131,13 +139,15 @@ class WeaviateClient:
 
 @lru_cache(maxsize=1)
 def get_weaviate_client() -> WeaviateClient:
-    """Get Weaviate client (singleton).
+    """Get Weaviate client (singleton) using hostname-based configuration.
+
+    Uses Settings class which provides hostname-based defaults (not localhost).
 
     Returns:
         WeaviateClient instance
 
     """
-    url = os.getenv("WEAVIATE_URL", "http://localhost:8082")
-    api_key = os.getenv("WEAVIATE_API_KEY")
+    from src.service.config import get_settings
 
-    return WeaviateClient(url, api_key)
+    settings = get_settings()
+    return WeaviateClient(settings.weaviate_url, settings.weaviate_api_key)

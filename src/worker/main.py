@@ -59,12 +59,15 @@ async def health_check():
 
 
 async def run_temporal_worker():
-    """Start Temporal worker."""
-    # Get configuration from environment
-    temporal_address = os.getenv("TEMPORAL_ADDRESS", "localhost:7233")
-    temporal_namespace = os.getenv("TEMPORAL_NAMESPACE", "default")
-    temporal_api_key = os.getenv("TEMPORAL_API_KEY")
-    task_queue = os.getenv("TEMPORAL_TASK_QUEUE", "hey-sh-workflows")
+    """Start Temporal worker using hostname-based configuration."""
+    from src.service.config import get_settings
+
+    # Get configuration from Settings (hostname-based)
+    settings = get_settings()
+    temporal_address = settings.temporal_address
+    temporal_namespace = settings.temporal_namespace
+    temporal_api_key = settings.temporal_api_key
+    task_queue = settings.temporal_task_queue
 
     logger.info(
         "Starting Temporal worker",

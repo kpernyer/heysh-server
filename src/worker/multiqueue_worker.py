@@ -159,10 +159,14 @@ class MultiQueueWorkerManager:
                 }, 503
 
     async def connect_temporal(self) -> Client:
-        """Connect to Temporal server."""
-        temporal_address = os.getenv("TEMPORAL_ADDRESS", "localhost:7233")
-        temporal_namespace = os.getenv("TEMPORAL_NAMESPACE", "default")
-        temporal_api_key = os.getenv("TEMPORAL_API_KEY")
+        """Connect to Temporal server using hostname-based configuration."""
+        from src.service.config import get_settings
+
+        # Get configuration from Settings (hostname-based)
+        settings = get_settings()
+        temporal_address = settings.temporal_address
+        temporal_namespace = settings.temporal_namespace
+        temporal_api_key = settings.temporal_api_key
 
         logger.info(
             "Connecting to Temporal",

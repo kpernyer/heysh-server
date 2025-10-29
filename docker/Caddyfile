@@ -52,8 +52,8 @@ http://api.hey.local {
 }
 
 # Temporal UI
-temporal.hey.local {
-    reverse_proxy localhost:8090
+http://temporal.hey.local {
+    reverse_proxy 127.0.0.1:8090
     log {
         output stdout
         format console
@@ -65,8 +65,8 @@ temporal.hey.local {
 # =============================================================================
 
 # PostgreSQL Database
-db.hey.local {
-    reverse_proxy localhost:5432
+http://db.hey.local {
+    reverse_proxy 127.0.0.1:5432
     log {
         output stdout
         format console
@@ -74,8 +74,8 @@ db.hey.local {
 }
 
 # Neo4j Browser
-neo4j.hey.local {
-    reverse_proxy localhost:7474
+http://neo4j.hey.local {
+    reverse_proxy 127.0.0.1:7474
     log {
         output stdout
         format console
@@ -83,8 +83,8 @@ neo4j.hey.local {
 }
 
 # Weaviate Vector Database
-weaviate.hey.local {
-    reverse_proxy localhost:8082
+http://weaviate.hey.local {
+    reverse_proxy weaviate:8080
     log {
         output stdout
         format console
@@ -92,17 +92,28 @@ weaviate.hey.local {
 }
 
 # Redis Cache
-redis.hey.local {
-    reverse_proxy localhost:6379
+http://redis.hey.local {
+    reverse_proxy 127.0.0.1:6379
     log {
         output stdout
         format console
     }
 }
 
-# MinIO Object Storage (Supabase alternative)
-supabase.hey.local {
-    reverse_proxy localhost:9000
+# Document Storage (abstracted - implementation varies by environment)
+# Local: MinIO (S3-compatible)
+# Production: Supabase Storage
+http://storage.hey.local {
+    reverse_proxy 127.0.0.1:9000
+    log {
+        output stdout
+        format console
+    }
+}
+
+# MinIO Admin Console (dev tool - local only)
+http://minio-console.hey.local {
+    reverse_proxy 127.0.0.1:9001
     log {
         output stdout
         format console
@@ -114,8 +125,8 @@ supabase.hey.local {
 # =============================================================================
 
 # Prometheus Metrics
-monitoring.hey.local {
-    reverse_proxy localhost:9090
+http://monitoring.hey.local {
+    reverse_proxy 127.0.0.1:9090
     log {
         output stdout
         format console
@@ -123,8 +134,8 @@ monitoring.hey.local {
 }
 
 # Grafana Dashboards
-grafana.hey.local {
-    reverse_proxy localhost:3001
+http://grafana.hey.local {
+    reverse_proxy 127.0.0.1:3001
     log {
         output stdout
         format console
@@ -132,8 +143,8 @@ grafana.hey.local {
 }
 
 # Alertmanager
-alertmanager.hey.local {
-    reverse_proxy localhost:9093
+http://alertmanager.hey.local {
+    reverse_proxy 127.0.0.1:9093
     log {
         output stdout
         format console
@@ -141,8 +152,8 @@ alertmanager.hey.local {
 }
 
 # Jaeger Tracing
-jaeger.hey.local {
-    reverse_proxy localhost:16686
+http://jaeger.hey.local {
+    reverse_proxy 127.0.0.1:16686
     log {
         output stdout
         format console
@@ -150,8 +161,8 @@ jaeger.hey.local {
 }
 
 # Loki Logs
-loki.hey.local {
-    reverse_proxy localhost:3100
+http://loki.hey.local {
+    reverse_proxy 127.0.0.1:3100
     log {
         output stdout
         format console

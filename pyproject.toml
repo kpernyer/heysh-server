@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "heysh-server"
-version = "0.1.0"
+version = "1.0.4"
 description = "Hey.sh Server - Python backend for knowledge management platform"
 authors = [
     {name = "Hey.sh Team", email = "team@hey.sh"},

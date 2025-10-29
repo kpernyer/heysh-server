@@ -84,14 +84,15 @@ class Neo4jClient:
 
 @lru_cache(maxsize=1)
 def get_neo4j_client() -> Neo4jClient:
-    """Get Neo4j client (singleton).
+    """Get Neo4j client (singleton) using hostname-based configuration.
+
+    Uses Settings class which provides hostname-based defaults (not localhost).
 
     Returns:
         Neo4jClient instance
 
     """
-    uri = os.getenv("NEO4J_URI", "bolt://localhost:7687")
-    user = os.getenv("NEO4J_USER", "neo4j")
-    password = os.getenv("NEO4J_PASSWORD", "password")
+    from src.service.config import get_settings
 
-    return Neo4jClient(uri, user, password)
+    settings = get_settings()
+    return Neo4jClient(settings.neo4j_uri, settings.neo4j_user, settings.neo4j_password)

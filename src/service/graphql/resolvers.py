@@ -3,6 +3,7 @@
 import json
 from datetime import datetime
 
+import structlog
 import weaviate
 from neo4j import AsyncGraphDatabase
 from supabase import create_client
@@ -10,6 +11,8 @@ from temporalio.client import Client as TemporalClient
 from temporalio.contrib.pydantic import pydantic_data_converter
 
 from ..config import get_settings
+
+logger = structlog.get_logger()
 from .types import (
     Domain,
     DomainStats,
@@ -44,7 +47,7 @@ class GraphQLResolvers:
                     settings.neo4j_uri,
                     auth=(settings.neo4j_user, settings.neo4j_password),
                 )
-                print(f"Neo4j connected to: {settings.neo4j_uri}")
+                logger.info("Neo4j connected", uri=settings.neo4j_uri)
 
             # Weaviate - using v4 client syntax
             if settings.weaviate_url:
@@ -56,7 +59,7 @@ class GraphQLResolvers:
                         api_key=settings.weaviate_api_key
                     ),
                 )
-                print(f"Weaviate connected to: {settings.weaviate_url}")
+                logger.info("Weaviate connected", url=settings.weaviate_url)
 
             # Temporal
             if settings.temporal_address:
@@ -76,17 +79,17 @@ class GraphQLResolvers:
                     data_converter=pydantic_data_converter,
                     **connect_config
                 )
-                print(f"Temporal connected to: {settings.temporal_address}")
+                logger.info("Temporal connected", address=settings.temporal_address)
 
             # Supabase
             if settings.supabase_url and settings.supabase_key:
                 self.supabase_client = create_client(
                     settings.supabase_url, settings.supabase_key
                 )
-                print(f"Supabase connected to: {settings.supabase_url}")
+                logger.info("Supabase connected", url=settings.supabase_url)
 
         except Exception as e:
-            print(f"Error initializing connections: {e}")
+            logger.warning("Error initializing connections", error=str(e))
             # Don't fail hard, allow partial connections
 
     async def close_connections(self):
