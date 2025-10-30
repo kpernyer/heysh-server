@@ -25,6 +25,12 @@ steps:
     id: 'build-backend'
     waitFor: ['get-build-time']
 
+  # Push image to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', '--all-tags', '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service']
+    id: 'push-backend'
+    waitFor: ['build-backend']
+
   # Deploy to Cloud Run
   - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
     entrypoint: 'gcloud'
@@ -37,7 +43,7 @@ steps:
       - '--region=${_REGION}'
       - '--project=$PROJECT_ID'
     id: 'deploy-backend'
-    waitFor: ['build-backend']
+    waitFor: ['push-backend']
 
 images:
   - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:${_VERSION}'
