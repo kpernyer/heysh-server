@@ -46,11 +46,11 @@ steps:
       - '-c'
       - |
         # Check if deployment files changed since last tag
-        LAST_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-        if [ -z "$LAST_TAG" ]; then
+        LAST_TAG=$$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+        if [ -z "$$LAST_TAG" ]; then
           echo "true" > /workspace/build_workers.txt
         else
-          if git diff --name-only $LAST_TAG HEAD | grep -qE '^(deployments/|src/workflows/)'; then
+          if git diff --name-only $$LAST_TAG HEAD | grep -qE '^(deployments/|src/workflows/)'; then
             echo "true" > /workspace/build_workers.txt
           else
             echo "false" > /workspace/build_workers.txt
