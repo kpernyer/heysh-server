@@ -29,6 +29,9 @@ from src.service.version import get_backend_info, get_api_version
 
 # Import SCI-compliant service connectors
 from src.service.connector_collaboration import router as collaboration_router
+from src.service.connector_knowledge import router as knowledge_router
+from src.service.connector_workflow import router as workflow_router
+from src.service.connector_identity import router as identity_router
 from src.service.v2.routes_config import router as config_router
 
 logger = structlog.get_logger()
@@ -93,13 +96,17 @@ app = FastAPI(
 
     **Service Connectors:**
     - **/collaboration**: Topics and memberships for knowledge collaboration
+    - **/knowledge**: Documents, analysis, and knowledge base search
+    - **/workflow**: Workflow executions, definitions, signals, and inbox
+    - **/identity**: User profiles, digital twins, and presence
     - **/config**: Configuration, features, and system limits
 
     **Key Features:**
-    - Singular resource naming (topic, membership)
-    - Hierarchical resource organization
+    - Singular resource naming (topic, document, workflow, user)
+    - Hierarchical resource organization (e.g., /workflow/execution/{id}/signal)
     - RESTful design with proper HTTP methods
     - snake_case path parameters
+    - Async operations return 202 Accepted with Location header
     """,
     version=get_api_version(),
     lifespan=lifespan,
@@ -138,6 +145,15 @@ app.include_router(websocket_router, include_in_schema=False)
 
 # Collaboration - Topics and memberships
 app.include_router(collaboration_router)
+
+# Knowledge - Documents and analysis
+app.include_router(knowledge_router)
+
+# Workflow - Executions, signals, and inbox
+app.include_router(workflow_router)
+
+# Identity - Users and digital twins
+app.include_router(identity_router)
 
 # Configuration - Settings and limits
 app.include_router(config_router)
