@@ -33,6 +33,16 @@ RUN uv pip install --system -e .
 # Production stage
 FROM base as production
 
+# Build arguments for version tracking
+ARG GIT_SHA
+ARG BUILD_TIME
+ARG ENVIRONMENT=production
+
+# Set build metadata as environment variables
+ENV GIT_SHA=${GIT_SHA}
+ENV BUILD_TIME=${BUILD_TIME}
+ENV ENVIRONMENT=${ENVIRONMENT}
+
 # Copy installed dependencies from builder
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
