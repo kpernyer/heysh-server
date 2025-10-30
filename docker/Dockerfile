@@ -47,6 +47,9 @@ ENV ENVIRONMENT=${ENVIRONMENT}
 COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
+# Copy pyproject.toml for version info
+COPY pyproject.toml ./
+
 # Copy application code
 COPY src/ ./src/
 COPY prompt/ ./prompt/

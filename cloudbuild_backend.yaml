@@ -9,21 +9,19 @@ steps:
 
   # Build Docker image with metadata
   - name: 'gcr.io/cloud-builders/docker'
+    entrypoint: 'bash'
     args:
-      - 'build'
-      - '-f'
-      - 'docker/Dockerfile'
-      - '--build-arg'
-      - 'GIT_SHA=$SHORT_SHA'
-      - '--build-arg'
-      - 'BUILD_TIME=$(cat /workspace/build_time.txt)'
-      - '--build-arg'
-      - 'ENVIRONMENT=${_DEPLOY_ENV}'
-      - '-t'
-      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:${_VERSION}'
-      - '-t'
-      - '${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:latest'
-      - '.'
+      - '-c'
+      - |
+        BUILD_TIME=$(cat /workspace/build_time.txt)
+        docker build \
+          -f docker/Dockerfile \
+          --build-arg GIT_SHA=$SHORT_SHA \
+          --build-arg BUILD_TIME=$${BUILD_TIME} \
+          --build-arg ENVIRONMENT=${_DEPLOY_ENV} \
+          -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:${_VERSION} \
+          -t ${_REGION}-docker.pkg.dev/$PROJECT_ID/hey-sh-backend/service:latest \
+          .
     id: 'build-backend'
     waitFor: ['get-build-time']
 
@@ -48,7 +46,7 @@ images:
 substitutions:
   _VERSION: 'latest'
   _REGION: 'europe-west3'
-  _DEPLOY_ENV: 'development'
+  _DEPLOY_ENV: 'production'
   _SERVICE_NAME: 'api'
 
 options:
