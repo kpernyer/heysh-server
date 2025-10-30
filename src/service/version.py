@@ -5,7 +5,7 @@ from pathlib import Path
 
 # Read version from pyproject.toml
 PYPROJECT_PATH = Path(__file__).parent.parent.parent / "pyproject.toml"
-VERSION = "1.0.7"  # Default version
+VERSION = "1.0.8"  # Default version
 
 if PYPROJECT_PATH.exists():
     try:
