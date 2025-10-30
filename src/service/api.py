@@ -25,7 +25,18 @@ from src.service.routes_users import router as users_router
 from src.service.routes_workflows import router as workflows_router
 from src.service.routes_workflows import set_temporal_client
 from src.service.websocket_routes import router as websocket_router
-from src.service.version import get_backend_info
+from src.service.version import get_backend_info, get_api_version
+
+# Import v2 routers
+from src.service.v2 import (
+    config_router as v2_config_router,
+    digital_twins_router as v2_digital_twins_router,
+    inbox_router as v2_inbox_router,
+    knowledge_base_router as v2_knowledge_base_router,
+    memberships_router as v2_memberships_router,
+    topics_router as v2_topics_router,
+    workflows_router as v2_workflows_router,
+)
 
 logger = structlog.get_logger()
 
@@ -85,7 +96,7 @@ async def lifespan(app: FastAPI):  # type: ignore
 app = FastAPI(
     title="Hey.sh Backend API",
     description="Backend orchestration layer for hey.sh knowledge platform",
-    version="0.1.0",
+    version=get_api_version(),
     lifespan=lifespan,
 )
 
@@ -127,6 +138,30 @@ app.include_router(membership_router, tags=["Membership"])
 
 # Include WebSocket routes
 app.include_router(websocket_router, tags=["WebSockets"])
+
+# ==================== API v2 Routes ====================
+# Clean RESTful API focused on domain concepts
+
+# v2 Topics - Core domain concept
+app.include_router(v2_topics_router)
+
+# v2 Memberships - User memberships across topics
+app.include_router(v2_memberships_router)
+
+# v2 Knowledge Base - Document and knowledge management
+app.include_router(v2_knowledge_base_router)
+
+# v2 Inbox - HITL workflow signals
+app.include_router(v2_inbox_router)
+
+# v2 Digital Twins - User representations
+app.include_router(v2_digital_twins_router)
+
+# v2 Workflows - Read-only workflow information
+app.include_router(v2_workflows_router)
+
+# v2 Config - Configuration with content negotiation
+app.include_router(v2_config_router)
 
 @app.get("/", include_in_schema=False)
 async def root():

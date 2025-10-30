@@ -5,7 +5,7 @@ from pathlib import Path
 
 # Read version from pyproject.toml
 PYPROJECT_PATH = Path(__file__).parent.parent.parent / "pyproject.toml"
-VERSION = "0.1.0"
+VERSION = "1.0.7"  # Default version
 
 if PYPROJECT_PATH.exists():
     try:
@@ -16,6 +16,11 @@ if PYPROJECT_PATH.exists():
                     break
     except Exception:
         pass
+
+
+def get_api_version() -> str:
+    """Get the API version for FastAPI documentation."""
+    return VERSION
 
 
 def get_backend_info() -> dict[str, str | None]:
@@ -31,5 +36,5 @@ def get_backend_info() -> dict[str, str | None]:
         "git_sha": os.getenv("GIT_SHA"),
         "built_at": os.getenv("BUILD_TIME"),
         "environment": os.getenv("ENVIRONMENT", "development"),
-        "api_version": "v1",
+        "api_version": "v2",  # Now using API v2
     }
