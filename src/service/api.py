@@ -174,7 +174,7 @@ async def health() -> dict[str, str]:
     return {"status": "healthy"}
 
 
-@app.get("/api/v1/info", tags=["Meta"], summary="API version info")
+@app.get("/api/v1/info", tags=["Meta"], summary="API version info", include_in_schema=False)
 async def info() -> dict[str, Any]:
     """Get backend version, git commit, and build information."""
     return get_backend_info()

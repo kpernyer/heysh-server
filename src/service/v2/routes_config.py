@@ -7,6 +7,7 @@ from fastapi import APIRouter, Header, HTTPException, Request, status
 from fastapi.responses import JSONResponse, Response
 
 from src.service.config import get_settings
+from src.service.version import get_backend_info
 
 logger = structlog.get_logger()
 
@@ -282,3 +283,12 @@ async def get_system_limits() -> Dict[str, Any]:
             "maxRequestSize": 10485760  # 10MB
         }
     }
+
+
+@router.get("/info")
+async def get_version_info() -> Dict[str, Any]:
+    """Get backend version and build information.
+
+    Returns version, git commit SHA, build timestamp, and environment.
+    """
+    return get_backend_info()
