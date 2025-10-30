@@ -27,16 +27,9 @@ from src.service.routes_workflows import set_temporal_client
 from src.service.websocket_routes import router as websocket_router
 from src.service.version import get_backend_info, get_api_version
 
-# Import v2 routers
-from src.service.v2 import (
-    config_router as v2_config_router,
-    digital_twins_router as v2_digital_twins_router,
-    inbox_router as v2_inbox_router,
-    knowledge_base_router as v2_knowledge_base_router,
-    memberships_router as v2_memberships_router,
-    topics_router as v2_topics_router,
-    workflows_router as v2_workflows_router,
-)
+# Import SCI-compliant service connectors
+from src.service.connector_collaboration import router as collaboration_router
+from src.service.v2.routes_config import router as config_router
 
 logger = structlog.get_logger()
 
@@ -94,17 +87,19 @@ async def lifespan(app: FastAPI):  # type: ignore
 
 # Create FastAPI app
 app = FastAPI(
-    title="Hey.sh API v2",
+    title="Hey.sh API v2.1 (SCI)",
     description="""
-    RESTful API for knowledge collaboration and workflow orchestration.
+    Service Connector Interface (SCI) compliant API for knowledge collaboration.
 
-    **Core Concepts:**
-    - **Topics**: Knowledge collaboration spaces
-    - **Memberships**: User participation with roles (Owner, Controller, Contributor, Member)
-    - **Knowledge Base**: Document management and AI analysis
-    - **Digital Twins**: User representations with presence and preferences
-    - **Inbox**: Human-in-the-loop workflow notifications
-    - **Workflows**: Read-only workflow status and history
+    **Service Connectors:**
+    - **/collaboration**: Topics and memberships for knowledge collaboration
+    - **/config**: Configuration, features, and system limits
+
+    **Key Features:**
+    - Singular resource naming (topic, membership)
+    - Hierarchical resource organization
+    - RESTful design with proper HTTP methods
+    - snake_case path parameters
     """,
     version=get_api_version(),
     lifespan=lifespan,
@@ -138,29 +133,14 @@ app.include_router(users_router, include_in_schema=False)
 app.include_router(membership_router, include_in_schema=False)
 app.include_router(websocket_router, include_in_schema=False)
 
-# ==================== API v2 Routes ====================
-# Clean RESTful API focused on domain concepts
+# ==================== SCI Service Connectors ====================
+# Service Connector Interface (SCI) compliant API
 
-# v2 Topics - Core domain concept
-app.include_router(v2_topics_router)
+# Collaboration - Topics and memberships
+app.include_router(collaboration_router)
 
-# v2 Memberships - User memberships across topics
-app.include_router(v2_memberships_router)
-
-# v2 Knowledge Base - Document and knowledge management
-app.include_router(v2_knowledge_base_router)
-
-# v2 Inbox - HITL workflow signals
-app.include_router(v2_inbox_router)
-
-# v2 Digital Twins - User representations
-app.include_router(v2_digital_twins_router)
-
-# v2 Workflows - Read-only workflow information
-app.include_router(v2_workflows_router)
-
-# v2 Config - Configuration with content negotiation
-app.include_router(v2_config_router)
+# Configuration - Settings and limits
+app.include_router(config_router)
 
 @app.get("/", include_in_schema=False)
 async def root():

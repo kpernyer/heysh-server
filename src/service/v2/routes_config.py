@@ -11,7 +11,7 @@ from src.service.version import get_backend_info
 
 logger = structlog.get_logger()
 
-router = APIRouter(prefix="/api/v2/config", tags=["Configuration"])
+router = APIRouter(prefix="/config", tags=["Configuration"])
 
 
 def get_frontend_configuration() -> Dict[str, Any]:
@@ -223,7 +223,7 @@ async def get_environment_config() -> Dict[str, Any]:
     }
 
 
-@router.get("/features")
+@router.get("/feature")
 async def get_feature_flags() -> Dict[str, bool]:
     """Get feature flags for the current environment.
 
@@ -245,7 +245,7 @@ async def get_feature_flags() -> Dict[str, bool]:
     }
 
 
-@router.get("/limits")
+@router.get("/limit")
 async def get_system_limits() -> Dict[str, Any]:
     """Get system limits and quotas.
 
