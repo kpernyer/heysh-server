@@ -34,7 +34,7 @@ def get_frontend_configuration() -> Dict[str, Any]:
             "fileUpload": True,
             "workflows": True,
             "digitalTwins": True,
-            "aiAssistant": settings.ai_features_enabled
+            "aiAssistant": getattr(settings, "ai_features_enabled", True)
         },
         "ui": {
             "theme": "light",
@@ -236,7 +236,7 @@ async def get_feature_flags() -> Dict[str, bool]:
         "fileUpload": True,
         "workflows": True,
         "digitalTwins": True,
-        "aiAssistant": settings.ai_features_enabled,
+        "aiAssistant": getattr(settings, "ai_features_enabled", True),
         "advancedSearch": True,
         "collaborativeEditing": False,  # Future feature
         "videoConferencing": False,  # Future feature
