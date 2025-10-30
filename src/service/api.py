@@ -94,10 +94,22 @@ async def lifespan(app: FastAPI):  # type: ignore
 
 # Create FastAPI app
 app = FastAPI(
-    title="Hey.sh Backend API",
-    description="Backend orchestration layer for hey.sh knowledge platform",
+    title="Hey.sh API v2",
+    description="""
+    RESTful API for knowledge collaboration and workflow orchestration.
+
+    **Core Concepts:**
+    - **Topics**: Knowledge collaboration spaces
+    - **Memberships**: User participation with roles (Owner, Controller, Contributor, Member)
+    - **Knowledge Base**: Document management and AI analysis
+    - **Digital Twins**: User representations with presence and preferences
+    - **Inbox**: Human-in-the-loop workflow notifications
+    - **Workflows**: Read-only workflow status and history
+    """,
     version=get_api_version(),
     lifespan=lifespan,
+    docs_url="/docs",
+    redoc_url="/redoc",
 )
 
 # CORS middleware - hostname-based configuration
@@ -115,29 +127,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include authentication routes (no auth required for some endpoints)
-app.include_router(auth_router, tags=["Authentication"])
-
-# Include configuration routes (no auth required)
-app.include_router(config_router, tags=["Configuration"])
-
-# Include data management routes (auth required)
-app.include_router(data_router, tags=["Documents & Topics"])
-
-# Include workflow orchestration routes (auth required)
-app.include_router(workflows_router, tags=["Workflows"])
-
-# Include inbox routes (auth required)
-app.include_router(inbox_router, tags=["Inbox"])
-
-# Include user management routes (auth required)
-app.include_router(users_router, tags=["Users"])
-
-# Include membership routes (auth required)
-app.include_router(membership_router, tags=["Membership"])
-
-# Include WebSocket routes
-app.include_router(websocket_router, tags=["WebSockets"])
+# ==================== API v1 Routes (Legacy - Hidden from Docs) ====================
+# Keep v1 routes functional for backward compatibility but hide from documentation
+app.include_router(auth_router, include_in_schema=False)
+app.include_router(config_router, include_in_schema=False)
+app.include_router(data_router, include_in_schema=False)
+app.include_router(workflows_router, include_in_schema=False)
+app.include_router(inbox_router, include_in_schema=False)
+app.include_router(users_router, include_in_schema=False)
+app.include_router(membership_router, include_in_schema=False)
+app.include_router(websocket_router, include_in_schema=False)
 
 # ==================== API v2 Routes ====================
 # Clean RESTful API focused on domain concepts

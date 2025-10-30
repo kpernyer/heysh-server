@@ -84,9 +84,13 @@ demo:
     set +a
     uv run uvicorn src.service.api:app --host 0.0.0.0 --port 8002 --log-level warning
 
-# Deploy to production (ship to customers)
+# =============================================================================
+# 🚀 DEPLOYMENT (Git Commit = Deployment Trigger)
+# =============================================================================
+
+# Deploy new version (creates version tag, triggers Cloud Build)
 deploy version message="Release {{version}}":
-    @echo "🚀 Deploying to production: {{version}}"
+    @echo "🚀 Deploying version: {{version}}"
     @echo "📝 {{message}}"
     @echo ""
     @if git diff --quiet && git diff --cached --quiet; then \
@@ -99,19 +103,62 @@ deploy version message="Release {{version}}":
     @git push origin main
     @git push origin {{version}}
     @echo ""
-    @echo "✅ Deployment triggered via Cloud Build"
-    @echo "📊 Monitor: just logs production"
-    @echo "🌐 Live at: https://api-blwol5d45q-ey.a.run.app"
+    @echo "✅ Version {{version}} committed and tagged"
+    @echo "🔨 Cloud Build will build this version automatically"
     @echo ""
-    @echo "☕ Deployment takes 5-10 minutes. Use 'just check production' to verify."
+    @echo "📊 Monitor build: just build-status"
+    @echo "🔍 When ready: just version-status {{version}}"
+    @echo ""
+    @echo "💡 This version is now a production-ready candidate"
+    @echo "   Use 'just promote {{version}}' to flip traffic to it"
 
-# Quick deploy (auto-version, for hotfixes)
-deploy-quick message="Quick deploy":
+# Promote a version to production (flip traffic)
+promote version:
+    @echo "🎯 Promoting version {{version}} to production"
+    @echo ""
+    @just --quiet _cloud-run-update-traffic {{version}} 100
+    @echo ""
+    @echo "✅ Traffic flipped to {{version}}"
+    @echo "🌐 Live at: https://api.hey.sh"
+    @echo ""
+    @echo "Verify: just status production"
+
+# Promote to staging (for testing before production)
+promote-staging version:
+    @echo "🧪 Promoting version {{version}} to staging"
+    @echo ""
+    @just --quiet _cloud-run-staging-deploy {{version}}
+    @echo ""
+    @echo "✅ Staging updated to {{version}}"
+    @echo "🌐 Test at: https://staging-api.hey.sh"
+    @echo ""
+    @echo "When ready: just promote {{version}}"
+
+# Gradual rollout (canary deployment)
+rollout version percent:
+    @echo "🐤 Canary rollout: {{version}} at {{percent}}%"
+    @just --quiet _cloud-run-split-traffic {{version}} {{percent}}
+    @echo ""
+    @echo "Monitor: just metrics production"
+    @echo "Continue: just rollout {{version}} 100"
+    @echo "Rollback: just rollback"
+
+# Rollback to previous version
+rollback:
+    @echo "⏮️  Rolling back to previous version"
+    @just --quiet _cloud-run-rollback
+    @echo ""
+    @echo "✅ Rolled back"
+    @echo "Verify: just status production"
+
+# Quick deploy (auto-version for hotfixes)
+hotfix message="Hotfix":
     #!/usr/bin/env bash
     set -euo pipefail
     SHORT_SHA=$(git rev-parse --short HEAD)
-    VERSION="v0.0.0-${SHORT_SHA}"
-    echo "⚡ Quick deploy: ${VERSION}"
+    TIMESTAMP=$(date +%Y%m%d-%H%M)
+    VERSION="hotfix-${TIMESTAMP}-${SHORT_SHA}"
+    echo "⚡ Creating hotfix: ${VERSION}"
     just deploy "${VERSION}" "{{message}}"
 
 # Rebuild base Docker image (run when requirements.txt changes)
@@ -124,6 +171,45 @@ rebuild-base:
     @echo "✅ Base image rebuilt"
     @echo "📦 Next deployments will use cached dependencies"
     @echo "⚡ Expected deploy time: 2-4 minutes (down from 15 minutes)"
+
+# =============================================================================
+# 📊 MONITORING & STATUS (Inspect Production)
+# =============================================================================
+
+# Check status of environment
+status environment="production":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "🔍 Status Check: {{environment}}"
+    echo "════════════════════════════════════════════════════════════════"
+    echo ""
+    if [ "{{environment}}" = "local" ]; then
+        just --quiet _check-local
+    elif [ "{{environment}}" = "staging" ]; then
+        just --quiet _status-staging
+    else
+        just --quiet _status-production
+    fi
+
+# Get current production version info
+version-info:
+    @just --quiet _prod-version-info
+
+# Check status of a specific version
+version-status version:
+    @just --quiet _version-status {{version}}
+
+# List all deployed versions
+versions:
+    @just --quiet _list-versions
+
+# Show build status
+build-status:
+    @just --quiet _build-status
+
+# Show production metrics
+metrics:
+    @just --quiet _prod-metrics
 
 # Global health check (everything working?)
 check environment="local":
@@ -217,19 +303,7 @@ learn:
     @echo "📊 Production Insights"
     @echo "======================"
     @echo ""
-    @echo "Backend Health:"
-    @curl -s https://api-blwol5d45q-ey.a.run.app/health | jq '.'
-    @echo ""
-    @echo "Recent Deployments:"
-    @gcloud builds list --limit 3 --format="table(createTime.date(tz=LOCAL),substitutions.TAG_NAME,status)"
-    @echo ""
-    @echo "Cloud Run Metrics:"
-    @gcloud run services describe api --region=europe-west3 --format="table(status.traffic[0].revisionName,status.traffic[0].percent,status.conditions[0].status)"
-    @echo ""
-    @echo "Worker Pods:"
-    @kubectl get pods -n temporal-workers --no-headers 2>/dev/null | wc -l | xargs -I {} echo "  {} pods running"
-    @echo ""
-    @echo "🔗 Full metrics: https://console.cloud.google.com/run/detail/europe-west3/api"
+    @just --quiet _prod-insights
 
 # Check SSL certificate and domain status
 domain:
@@ -519,17 +593,25 @@ _check-production:
     #!/usr/bin/env bash
     set -euo pipefail
 
-    echo "🌐 Backend API (Cloud Run):"
-    if curl -s https://api-blwol5d45q-ey.a.run.app/health >/dev/null 2>&1; then
-        HEALTH=$(curl -s https://api-blwol5d45q-ey.a.run.app/health | jq -r .status)
-        echo "  ✅ https://api-blwol5d45q-ey.a.run.app - $HEALTH"
-        curl -s https://api-blwol5d45q-ey.a.run.app/api/v1/topics 2>&1 | grep -q "Missing authorization" && echo "  ✅ /api/v1/topics - Requires auth (working)"
+    echo "🌐 Backend API:"
+    if curl -s https://api.hey.sh/health >/dev/null 2>&1; then
+        HEALTH=$(curl -s https://api.hey.sh/health | jq -r .status)
+        VERSION=$(curl -s https://api.hey.sh/api/v1/info | jq -r .version)
+        echo "  ✅ https://api.hey.sh - $HEALTH (v$VERSION)"
+        curl -s https://api.hey.sh/api/v2/config/features >/dev/null 2>&1 && echo "  ✅ API v2 - Working"
     else
         echo "  ❌ Backend not responding"
-        echo "     Check: gcloud run services describe api --region=europe-west3"
+        echo "     Check: just status production"
     fi
     echo ""
-    echo "🐳 Docker Images (Artifact Registry):"
+    just --quiet _check-production-infra
+
+# Production infrastructure check (wrapped gcloud commands)
+_check-production-infra:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    echo "🐳 Docker Images:"
     LATEST=$(gcloud artifacts docker tags list europe-west3-docker.pkg.dev/hey-sh-production/hey-sh-backend/service --limit=1 --format="value(tag)" 2>/dev/null | head -1)
     if [ -n "$LATEST" ]; then
         echo "  ✅ Latest image: $LATEST"
@@ -537,25 +619,14 @@ _check-production:
         echo "  ❌ No images found"
     fi
     echo ""
-    echo "👷 Workers (GKE):"
-    PODS=$(kubectl get pods -n temporal-workers --no-headers 2>/dev/null | wc -l | tr -d ' ')
-    if [ "$PODS" -gt 0 ]; then
-        echo "  ✅ $PODS pods running"
-        kubectl get pods -n temporal-workers --no-headers 2>/dev/null | awk '{print "     " $1 " - " $3}'
-    else
-        echo "  ⚠️  No worker pods found"
-        echo "     Check: kubectl get pods -n temporal-workers"
-    fi
-    echo ""
     echo "📊 Recent Deployments:"
     gcloud builds list --limit 3 --format="table(createTime.date(tz=LOCAL),substitutions.TAG_NAME,status)" 2>/dev/null || echo "  ⚠️  Cannot fetch (run: gcloud auth login)"
     echo ""
     echo "Summary:"
-    echo "  • Backend should show ✅ healthy"
-    echo "  • Workers should show running pods"
+    echo "  • API should show ✅ at https://api.hey.sh"
     echo "  • Latest deployment should be SUCCESS"
     echo ""
-    echo "Full logs: just logs production"
+    echo "Details: just status production"
 
 # Local logs
 _logs-local service:
@@ -698,9 +769,14 @@ _status-production:
             echo "     → Run: gcloud config set project YOUR_PROJECT_ID"
         else
             echo "  📊 Project: $PROJECT"
-            if curl -s https://api-blwol5d45q-ey.a.run.app/health >/dev/null 2>&1; then
-                HEALTH=$(curl -s https://api-blwol5d45q-ey.a.run.app/health | jq -r .status 2>/dev/null || echo "unknown")
-                echo "  ✅ Backend API: https://api-blwol5d45q-ey.a.run.app ($HEALTH)"
+            echo "  🌐 Domain: https://api.hey.sh"
+            echo ""
+            if curl -s https://api.hey.sh/health >/dev/null 2>&1; then
+                HEALTH=$(curl -s https://api.hey.sh/health | jq -r .status 2>/dev/null || echo "unknown")
+                VERSION=$(curl -s https://api.hey.sh/api/v1/info | jq -r .version 2>/dev/null || echo "unknown")
+                GITSHA=$(curl -s https://api.hey.sh/api/v1/info | jq -r .git_sha 2>/dev/null || echo "unknown")
+                echo "  ✅ Backend API: $HEALTH"
+                echo "     Version: $VERSION ($GITSHA)"
             else
                 echo "  ❌ Backend API not responding"
             fi
@@ -833,3 +909,261 @@ _bootstrap-production-check:
     echo ""
     echo "✅ If all show ✅, your CI/CD is configured correctly"
     echo "❌ If any show ❌, see docs/PRODUCTION_BOOTSTRAP.md for setup"
+
+# =============================================================================
+# 🔧 NEW DEPLOYMENT IMPLEMENTATION (Wrapped gcloud commands)
+# =============================================================================
+
+# Cloud Run: Update traffic to a specific version
+_cloud-run-update-traffic version percent:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Updating Cloud Run traffic..."
+    gcloud run services update-traffic api \
+        --region=europe-west3 \
+        --to-revisions=api-{{version}}={{percent}}
+    echo ""
+    echo "Traffic updated. Verifying..."
+    gcloud run services describe api \
+        --region=europe-west3 \
+        --format="table(status.traffic[].revisionName,status.traffic[].percent)"
+
+# Cloud Run: Split traffic between versions (canary)
+_cloud-run-split-traffic version percent:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Get current serving revision
+    CURRENT=$(gcloud run services describe api \
+        --region=europe-west3 \
+        --format="value(status.traffic[0].revisionName)" | head -1)
+    REMAINING=$((100 - {{percent}}))
+
+    echo "Splitting traffic: {{version}}={{percent}}%, $CURRENT=$REMAINING%"
+    gcloud run services update-traffic api \
+        --region=europe-west3 \
+        --to-revisions=api-{{version}}={{percent}},$CURRENT=$REMAINING
+
+# Cloud Run: Rollback to previous revision
+_cloud-run-rollback:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "Getting previous revision..."
+    PREVIOUS=$(gcloud run revisions list \
+        --service=api \
+        --region=europe-west3 \
+        --format="value(metadata.name)" \
+        --limit=2 | tail -1)
+
+    echo "Rolling back to: $PREVIOUS"
+    gcloud run services update-traffic api \
+        --region=europe-west3 \
+        --to-revisions=$PREVIOUS=100
+
+# Cloud Run: Deploy to staging
+_cloud-run-staging-deploy version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Note: Assumes staging service exists
+    # Create with: gcloud run services create api-staging --image=... --region=europe-west3
+    echo "Deploying {{version}} to staging..."
+    IMAGE="europe-west3-docker.pkg.dev/hey-sh-production/hey-sh-backend/service:{{version}}"
+    gcloud run services update api-staging \
+        --region=europe-west3 \
+        --image=$IMAGE
+
+# Get production version info
+_prod-version-info:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "🏷️  Production Version Info"
+    echo "════════════════════════════════════════════════════════════════"
+
+    # Get from api.hey.sh
+    if curl -s https://api.hey.sh/api/v1/info >/dev/null 2>&1; then
+        INFO=$(curl -s https://api.hey.sh/api/v1/info)
+        VERSION=$(echo "$INFO" | jq -r .version)
+        GITSHA=$(echo "$INFO" | jq -r .git_sha)
+        BUILT=$(echo "$INFO" | jq -r .built_at)
+        ENV=$(echo "$INFO" | jq -r .environment)
+
+        echo "  Version: $VERSION"
+        echo "  Git SHA: $GITSHA"
+        echo "  Built: $BUILT"
+        echo "  Environment: $ENV"
+    else
+        echo "  ❌ Cannot reach api.hey.sh"
+    fi
+
+    echo ""
+    # Get Cloud Run serving info
+    echo "  Traffic Distribution:"
+    gcloud run services describe api \
+        --region=europe-west3 \
+        --format="table[no-heading](status.traffic[].revisionName,status.traffic[].percent)" \
+        | sed 's/^/    /'
+
+# Check status of specific version
+_version-status version:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "🔍 Version Status: {{version}}"
+    echo "════════════════════════════════════════════════════════════════"
+
+    # Check if image exists
+    IMAGE="europe-west3-docker.pkg.dev/hey-sh-production/hey-sh-backend/service:{{version}}"
+    if gcloud container images describe "$IMAGE" >/dev/null 2>&1; then
+        echo "  ✅ Image exists: {{version}}"
+        DIGEST=$(gcloud container images describe "$IMAGE" --format="value(image_summary.digest)")
+        echo "     Digest: $DIGEST"
+    else
+        echo "  ❌ Image not found: {{version}}"
+        echo "     Build may still be in progress"
+        exit 1
+    fi
+
+    echo ""
+    # Check if deployed
+    DEPLOYED=$(gcloud run revisions list \
+        --service=api \
+        --region=europe-west3 \
+        --format="value(metadata.name)" \
+        | grep "{{version}}" || echo "")
+
+    if [ -n "$DEPLOYED" ]; then
+        echo "  ✅ Deployed as revision: $DEPLOYED"
+        TRAFFIC=$(gcloud run services describe api \
+            --region=europe-west3 \
+            --format="value(status.traffic[?revisionName='$DEPLOYED'].percent)" | head -1)
+        if [ -n "$TRAFFIC" ]; then
+            echo "     Serving: $TRAFFIC% of traffic"
+        else
+            echo "     Serving: 0% of traffic (revision exists but not serving)"
+        fi
+    else
+        echo "  ⏸️  Not deployed to Cloud Run yet"
+        echo "     Use: just promote {{version}}"
+    fi
+
+# List all deployed versions
+_list-versions:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "📦 Deployed Versions"
+    echo "════════════════════════════════════════════════════════════════"
+
+    echo "Available images:"
+    gcloud artifacts docker tags list \
+        europe-west3-docker.pkg.dev/hey-sh-production/hey-sh-backend/service \
+        --limit=10 \
+        --format="table(tag,timestamp.date(tz=LOCAL))" \
+        | sed 's/^/  /'
+
+    echo ""
+    echo "Cloud Run revisions:"
+    gcloud run revisions list \
+        --service=api \
+        --region=europe-west3 \
+        --limit=10 \
+        --format="table(metadata.name,metadata.creationTimestamp.date(tz=LOCAL),status.conditions[0].status)" \
+        | sed 's/^/  /'
+
+# Show build status
+_build-status:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "🔨 Build Status"
+    echo "════════════════════════════════════════════════════════════════"
+
+    echo "Recent builds:"
+    gcloud builds list \
+        --limit=5 \
+        --format="table(id,createTime.date(tz=LOCAL),substitutions.TAG_NAME,status,logUrl)"
+
+    echo ""
+    # Check if any builds are currently running
+    RUNNING=$(gcloud builds list \
+        --filter="status=WORKING OR status=QUEUED" \
+        --format="value(id)" | wc -l | tr -d ' ')
+
+    if [ "$RUNNING" -gt 0 ]; then
+        echo "⏳ $RUNNING build(s) in progress"
+        echo "   Monitor: gcloud builds log \$(gcloud builds list --limit=1 --format='value(id)') --stream"
+    else
+        echo "✅ No builds currently running"
+    fi
+
+# Show production metrics
+_prod-metrics:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "📊 Production Metrics"
+    echo "════════════════════════════════════════════════════════════════"
+
+    # Cloud Run metrics
+    echo "Cloud Run Service:"
+    gcloud run services describe api \
+        --region=europe-west3 \
+        --format="yaml(status.traffic,status.conditions)" \
+        | grep -E "revisionName|percent|type|status" \
+        | sed 's/^/  /'
+
+    echo ""
+    echo "Request count (last hour):"
+    echo "  (Use Cloud Console for detailed metrics)"
+    echo "  🔗 https://console.cloud.google.com/run/detail/europe-west3/api/metrics"
+
+# Production insights
+_prod-insights:
+    #!/usr/bin/env bash
+    set -euo pipefail
+
+    echo "Backend Health:"
+    if curl -s https://api.hey.sh/health >/dev/null 2>&1; then
+        curl -s https://api.hey.sh/health | jq '.'
+    else
+        echo "  ❌ Not reachable"
+    fi
+
+    echo ""
+    echo "API Version:"
+    if curl -s https://api.hey.sh/api/v1/info >/dev/null 2>&1; then
+        curl -s https://api.hey.sh/api/v1/info | jq '.'
+    else
+        echo "  ❌ Cannot fetch version info"
+    fi
+
+    echo ""
+    echo "Recent Deployments:"
+    gcloud builds list --limit 3 --format="table(createTime.date(tz=LOCAL),substitutions.TAG_NAME,status)"
+
+    echo ""
+    echo "Traffic Distribution:"
+    gcloud run services describe api \
+        --region=europe-west3 \
+        --format="table(status.traffic[].revisionName,status.traffic[].percent)"
+
+    echo ""
+    echo "🔗 Full metrics: https://console.cloud.google.com/run/detail/europe-west3/api"
+    echo "🔗 Logs: https://console.cloud.google.com/logs"
+
+# Staging status
+_status-staging:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "🧪 Staging Environment"
+    echo "════════════════════════════════════════════════════════════════"
+
+    # Check if staging service exists
+    if gcloud run services describe api-staging --region=europe-west3 >/dev/null 2>&1; then
+        echo "  ✅ Staging service exists"
+        URL=$(gcloud run services describe api-staging --region=europe-west3 --format="value(status.url)")
+        echo "     URL: $URL"
+
+        # Get version info
+        IMAGE=$(gcloud run services describe api-staging --region=europe-west3 --format="value(spec.template.spec.containers[0].image)")
+        VERSION=$(echo "$IMAGE" | grep -oE '[^:]+$')
+        echo "     Version: $VERSION"
+    else
+        echo "  ⚠️  Staging service not created yet"
+        echo "     Create with: gcloud run deploy api-staging --image=europe-west3-docker.pkg.dev/hey-sh-production/hey-sh-backend/service:latest --region=europe-west3"
+    fi
